@@ -92,7 +92,8 @@ fun RecentCreations() {
 /** Temporary files the app owns (exports in progress, camera segments, generated voices). Never touches originals or saved results. */
 fun tempFiles(ctx: Context): List<File> =
     (ctx.cacheDir.listFiles().orEmpty().filter { it.isFile && (it.name.startsWith("export_") || it.name.startsWith("reel_")) } +
-        ctx.filesDir.listFiles().orEmpty().filter { it.isFile && (it.name.startsWith("tts_") || it.name == "voiceover.m4a") })
+        ctx.filesDir.listFiles().orEmpty().filter { it.isFile && (it.name.startsWith("tts_") || it.name == "voiceover.m4a") } +
+        OverlayFiles.dir(ctx).listFiles().orEmpty().toList())
 
 @Composable
 fun SettingsDialog(onDismiss: () -> Unit, onReplayIntro: () -> Unit) {

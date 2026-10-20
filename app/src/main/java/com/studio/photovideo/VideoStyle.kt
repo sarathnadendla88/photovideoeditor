@@ -11,6 +11,12 @@ import androidx.media3.common.util.Size
 import androidx.media3.effect.BitmapOverlay
 import androidx.media3.effect.StaticOverlaySettings
 
+/**
+ * Anchor for an overlay of [itemPx] inside a frame of [framePx], matching Compose's BiasAlignment used by the preview:
+ * bias ±1 puts the element's *edge* flush with the frame edge (Media3 would put its centre there and cut it in half).
+ */
+fun fitAnchor(bias: Float, itemPx: Int, framePx: Int): Float = bias * (1f - itemPx.toFloat() / framePx).coerceAtLeast(0f)
+
 /** A burned-in caption shown between [startMs] and [endMs] on the exported timeline. */
 data class Caption(val text: String, val startMs: Long, val endMs: Long, val x: Float = 0f, val y: Float = -0.7f)
 
@@ -76,7 +82,7 @@ fun rampedOutputMs(lengthMs: Long, ramp: SpeedRamp, base: Float): Long {
 
 /** Renders timed captions for one clip. [offsetMs] is where the clip starts on the exported timeline. */
 class CaptionOverlay(
-    private val captions: List<Caption>, private val offsetMs: Long, private val canvasWidth: Int,
+    private val captions: List<Caption>, private val offsetMs: Long, private val canvasWidth: Int, private val canvasHeight: Int,
     private val capStyle: CaptionStyle, private val anim: CaptionAnim, private val anchorY: Float, private val sizeScale: Float,
 ) : BitmapOverlay() {
     private val empty = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
@@ -86,7 +92,8 @@ class CaptionOverlay(
 
     override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
         val c = active(presentationTimeUs)
-        val ax = c?.x ?: 0f; val ay = c?.y ?: anchorY
+        val bmp = getBitmap(presentationTimeUs)
+        val ax = fitAnchor(c?.x ?: 0f, bmp.width, canvasWidth); val ay = fitAnchor(c?.y ?: anchorY, bmp.height, canvasHeight)
         val p = if (c == null) 1f else (((offsetMs + presentationTimeUs / 1000) - c.startMs) / 300f).coerceIn(0f, 1f)
         val e = 1f - (1f - p) * (1f - p)
         val b = StaticOverlaySettings.Builder()
@@ -134,11 +141,14 @@ fun emojiBitmap(emoji: String, px: Int): Bitmap {
 
 
 /** Sticker / picture that is only visible inside its time window (opacity 0 outside it). */
-class TimedBitmapOverlay(private val bmp: Bitmap, private val offsetMs: Long, private val st: VideoSticker) : BitmapOverlay() {
+class TimedBitmapOverlay(private val bmp: Bitmap, private val offsetMs: Long, private val st: VideoSticker, private val frameW: Int, private val frameH: Int) : BitmapOverlay() {
     override fun getBitmap(presentationTimeUs: Long): Bitmap = bmp
     override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
         val g = offsetMs + presentationTimeUs / 1000
         val on = g >= st.startMs && g < st.endMs
-        return StaticOverlaySettings.Builder().setBackgroundFrameAnchor(st.x, st.y).setRotationDegrees(st.rotation).setAlphaScale(if (on) 1f else 0f).build()
+        return StaticOverlaySettings.Builder()
+            .setBackgroundFrameAnchor(fitAnchor(st.x, bmp.width, frameW), fitAnchor(st.y, bmp.height, frameH))
+            .setRotationDegrees(-st.rotation) // Media3 rotates counter-clockwise, the preview clockwise
+            .setAlphaScale(if (on) 1f else 0f).build()
     }
 }

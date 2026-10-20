@@ -11,6 +11,9 @@ class DraftStore(private val context: Context) {
     private val dir = File(context.filesDir, "slideshow_draft").apply { mkdirs() }
     private val file = File(dir, "draft.json")
 
+    /** Copies a picked overlay picture into the draft folder so it survives restarts (picker links expire). */
+    fun importOverlay(uri: Uri): Uri? = copyInto(context, uri, dir, "overlay_")
+
     fun importPhoto(uri: Uri): Uri? = runCatching {
         val ext = when (context.contentResolver.getType(uri)) {
             "image/png" -> "png"; "image/webp" -> "webp"; "image/heic", "image/heif" -> "heic"; else -> "jpg"
@@ -34,9 +37,12 @@ class DraftStore(private val context: Context) {
         }
         file.writeText(j.toString())
         // drop copies no longer referenced
-        val keep = p.photos.mapNotNull { it.path?.let(::File) }.toSet()
-        dir.listFiles { f -> f.name.startsWith("photo_") }?.filter { it !in keep }?.forEach { it.delete() }
+        val keep = (p.photos + p.stickers.mapNotNull { it.imageUri?.let(Uri::parse) }).mapNotNull { it.path?.let(::File) }.toSet()
+        dir.listFiles { f -> f.name.startsWith("photo_") || f.name.startsWith("overlay_") }?.filter { it !in keep }?.forEach { it.delete() }
     }
+
+    /** A picture whose picker permission expired (older drafts) can no longer be read; drop it instead of failing silently. */
+    private fun readable(uri: Uri) = runCatching { context.contentResolver.openInputStream(uri)?.use { true } ?: false }.getOrDefault(false)
 
     fun load(): SlideshowProject? = runCatching {
         if (!file.exists()) return null
@@ -51,8 +57,24 @@ class DraftStore(private val context: Context) {
             ExportQuality.valueOf(j.optString("quality", "HD")), Motion.valueOf(j.optString("motion", "KEN_BURNS")),
             j.optString("title"), j.optString("endText"), Transition.valueOf(j.optString("transition", "NONE")), j.optString("watermark"),
             j.optJSONObject("slideCaptions")?.let { o -> o.keys().asSequence().associateWith { k -> o.getString(k) } }.orEmpty(),
-            j.optJSONArray("stickers")?.let { a -> List(a.length()) { i -> a.getJSONObject(i).let { o -> VideoSticker(o.getString("emoji"), o.getDouble("x").toFloat(), o.getDouble("y").toFloat(), o.getDouble("size").toFloat(), rotation = o.getDouble("rotation").toFloat(), imageUri = o.optString("image").ifEmpty { null }) } } }.orEmpty(),
+            j.optJSONArray("stickers")?.let { a -> List(a.length()) { i -> a.getJSONObject(i).let { o -> VideoSticker(o.getString("emoji"), o.getDouble("x").toFloat(), o.getDouble("y").toFloat(), o.getDouble("size").toFloat(), rotation = o.getDouble("rotation").toFloat(), imageUri = o.optString("image").ifEmpty { null }) } } }
+                .orEmpty().filter { st -> st.imageUri == null || readable(Uri.parse(st.imageUri)) },
             music,
         )
     }.getOrNull()
+}
+
+
+/** Shared copy helper; also used for pictures placed on photos and videos (stored under files/overlays). */
+fun copyInto(context: Context, uri: Uri, dir: File, prefix: String): Uri? = runCatching {
+    dir.mkdirs()
+    val ext = when (context.contentResolver.getType(uri)) { "image/png" -> "png"; "image/webp" -> "webp"; "image/heic", "image/heif" -> "heic"; else -> "jpg" }
+    val dest = File(dir, "$prefix${System.nanoTime()}.$ext")
+    context.contentResolver.openInputStream(uri)!!.use { i -> dest.outputStream().use { i.copyTo(it) } }
+    Uri.fromFile(dest)
+}.getOrNull()
+
+object OverlayFiles {
+    fun dir(context: Context) = File(context.filesDir, "overlays")
+    fun import(context: Context, uri: Uri): Uri? = copyInto(context, uri, dir(context), "overlay_")
 }

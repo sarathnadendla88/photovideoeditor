@@ -45,6 +45,12 @@ class SlideshowViewModel(app: Application) : AndroidViewModel(app) {
     fun setEndText(t: String) = _project.update { it.copy(endText = t) }
     fun applyTemplate(t: SlideshowTemplate) = _project.update { it.applyTemplate(t) }
     fun setSlideCaption(uri: Uri, text: String) = _project.update { p -> p.copy(slideCaptions = if (text.isBlank()) p.slideCaptions - uri.toString() else p.slideCaptions + (uri.toString() to text.take(80))) }
+    /** Copies the picture into app storage first so the draft keeps working after a restart. */
+    suspend fun addPicture(uri: Uri): Boolean {
+        val copy = withContext(Dispatchers.IO) { drafts.importOverlay(uri) } ?: return false
+        addSticker(VideoSticker(imageUri = copy.toString(), size = 0.3f, y = 0f))
+        return true
+    }
     fun addSticker(s: VideoSticker) = _project.update { it.copy(stickers = it.stickers + s) }
     fun updateSticker(i: Int, f: (VideoSticker) -> VideoSticker) = _project.update { p -> p.copy(stickers = p.stickers.mapIndexed { idx, s -> if (idx == i) f(s) else s }) }
     fun removeSticker(i: Int) = _project.update { p -> p.copy(stickers = p.stickers.filterIndexed { idx, _ -> idx != i }) }

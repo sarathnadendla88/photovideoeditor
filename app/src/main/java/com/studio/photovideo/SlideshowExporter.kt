@@ -133,8 +133,8 @@ class SlideshowExporter(private val context: Context) {
             p.slideCaptions[uri.toString()]?.takeIf { it.isNotBlank() }?.let { extra += staticText(it, -0.4f, cw) }
             p.stickers.forEach { st ->
                 val px = (cw * st.size).toInt().coerceAtLeast(32)
-                val bmp = if (st.imageUri != null) PhotoProcessor.decode(context, android.net.Uri.parse(st.imageUri), px) else emojiBitmap(st.emoji, px)
-                if (bmp != null) extra += TimedBitmapOverlay(bmp, 0L, st)
+                val bmp = if (st.imageUri != null) PhotoProcessor.decodeToWidth(context, android.net.Uri.parse(st.imageUri), px) else emojiBitmap(st.emoji, px)
+                if (bmp != null) extra += TimedBitmapOverlay(bmp, 0L, st, cw, ch)
             }
             fadeFor(p.transition, i, p.photos.size, cw, ch, p.perPhotoMs)?.let { extra += it }
             if (extra.isNotEmpty()) video += OverlayEffect(extra)

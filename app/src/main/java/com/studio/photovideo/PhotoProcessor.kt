@@ -28,6 +28,13 @@ object PhotoProcessor {
         if (deg == 0f && scale >= 1f) bmp else Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
     }.getOrNull()
 
+    /** Decodes and scales so the bitmap is exactly [widthPx] wide (height follows), like a picture sized by width in the preview. */
+    fun decodeToWidth(context: Context, uri: Uri, widthPx: Int): Bitmap? {
+        val b = decode(context, uri, (widthPx * 2).coerceIn(256, 4096)) ?: return null
+        if (b.width == widthPx) return b
+        return Bitmap.createScaledBitmap(b, widthPx, (b.height * widthPx.toFloat() / b.width).toInt().coerceAtLeast(1), true)
+    }
+
     /** On-device person segmentation (ML Kit bundled model, works offline). Returns an ALPHA_8 mask at [src] size, or null. */
     suspend fun segment(src: Bitmap): Bitmap? = runCatching {
         val client = Segmentation.getClient(SelfieSegmenterOptions.Builder().setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE).build())
@@ -118,6 +125,9 @@ object PhotoProcessor {
         return out
     }
 
+    /** Centre coordinate that keeps an item of [size] fully inside 0..[frame]. */
+    fun clampCentre(c: Float, size: Float, frame: Float): Float = if (size >= frame) frame / 2 else c.coerceIn(size / 2, frame - size / 2)
+
     fun drawText(canvas: Canvas, t: TextLayer, W: Float, H: Float) {
         val size = H * t.size
         val style = when { t.bold && t.italic -> Typeface.BOLD_ITALIC; t.bold -> Typeface.BOLD; t.italic -> Typeface.ITALIC; else -> Typeface.NORMAL }
@@ -164,15 +174,19 @@ object PhotoProcessor {
         }
         e.images.forEach { im ->
             val bmp2 = imageLoader?.invoke(im.uri) ?: return@forEach
-            val dw = W * im.size; val dh = dw * bmp2.height / bmp2.width
-            canvas.save(); canvas.rotate(im.rotation, W * im.x, H * im.y)
-            canvas.drawBitmap(bmp2, null, RectF(W * im.x - dw / 2, H * im.y - dh / 2, W * im.x + dw / 2, H * im.y + dh / 2), Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = (im.alpha * 255).toInt() })
+            val dw = minOf(W * im.size, W); val dh = dw * bmp2.height / bmp2.width
+            // Keep the whole picture inside the frame: dragging to an edge parks it flush instead of cutting it off.
+            val cx = clampCentre(W * im.x, dw, W); val cy = clampCentre(H * im.y, dh, H)
+            canvas.save(); canvas.rotate(im.rotation, cx, cy)
+            canvas.drawBitmap(bmp2, null, RectF(cx - dw / 2, cy - dh / 2, cx + dw / 2, cy + dh / 2), Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = (im.alpha * 255).toInt() })
             canvas.restore()
         }
         e.stickers.forEach { s ->
             val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = s.size * H; textAlign = Paint.Align.CENTER }
-            canvas.save(); canvas.rotate(s.rotation, s.x * W, s.y * H)
-            canvas.drawText(s.emoji, s.x * W, s.y * H + p.textSize * 0.35f, p)
+            val half = p.textSize * 0.55f
+            val sx = clampCentre(s.x * W, half * 2, W); val sy = clampCentre(s.y * H, half * 2, H)
+            canvas.save(); canvas.rotate(s.rotation, sx, sy)
+            canvas.drawText(s.emoji, sx, sy + p.textSize * 0.35f, p)
             canvas.restore()
         }
         e.texts.filter { it.text.isNotBlank() }.forEach { t -> drawText(canvas, t, W, H) }

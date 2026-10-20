@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 
 private val tabs = listOf(
     ToolTab("Photos", Icons.Default.PhotoLibrary), ToolTab("Style", Icons.Default.AutoAwesome), ToolTab("Titles", Icons.Default.Title),
@@ -42,9 +43,10 @@ fun SlideshowScreen(vm: SlideshowViewModel, onBack: () -> Unit) {
     val ctx = LocalContext.current
     var tab by remember { mutableIntStateOf(0) }
     var selected by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
     var stickerSel by remember { mutableStateOf<OverlaySel?>(null) }
     val stickerPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) { vm.addSticker(VideoSticker(imageUri = uri.toString(), size = 0.3f, y = 0f)); stickerSel = OverlaySel(1, vm.project.value.stickers.lastIndex) }
+        if (uri != null) scope.launch { if (vm.addPicture(uri)) stickerSel = OverlaySel(1, vm.project.value.stickers.lastIndex) }
     }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(SlideshowProject.MAX_PHOTOS)) { vm.addPhotos(it) }
     val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(vm::setMusic) }

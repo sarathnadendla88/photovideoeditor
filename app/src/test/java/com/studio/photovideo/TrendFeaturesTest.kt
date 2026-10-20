@@ -104,3 +104,22 @@ class OverlayLayerTest {
         assertTrue(p.slideCaptions.isEmpty())
     }
 }
+
+class EdgeFitTest {
+    @Test fun anchorKeepsItemInsideFrame() {
+        // 216 px wide picture in a 720 px frame at the right edge: centre bias must stop 108 px short of the edge
+        val a = fitAnchor(1f, 216, 720)
+        assertEquals(1f - 216f / 720f, a, 0.0001f)
+        assertEquals(-a, fitAnchor(-1f, 216, 720), 0.0001f)
+        assertEquals(0f, fitAnchor(0f, 216, 720), 0f)
+    }
+
+    @Test fun oversizedItemIsCentredNotNegative() { assertEquals(0f, fitAnchor(1f, 900, 720), 0f) }
+
+    @Test fun photoLayerIsClampedInside() {
+        assertEquals(50f, PhotoProcessor.clampCentre(0f, 100f, 1000f), 0f)
+        assertEquals(950f, PhotoProcessor.clampCentre(1000f, 100f, 1000f), 0f)
+        assertEquals(400f, PhotoProcessor.clampCentre(400f, 100f, 1000f), 0f)
+        assertEquals(500f, PhotoProcessor.clampCentre(10f, 1200f, 1000f), 0f)
+    }
+}

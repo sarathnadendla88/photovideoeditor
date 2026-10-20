@@ -145,11 +145,11 @@ fun buildVideoComposition(ctx: android.content.Context, p: VideoProject): Compos
             add(Presentation.createForWidthAndHeight(cw, ch, Presentation.LAYOUT_SCALE_TO_FIT))
             addAll(videoColorEffects(p))
             val overlays = mutableListOf<androidx.media3.effect.TextureOverlay>()
-            if (p.captions.isNotEmpty()) overlays += CaptionOverlay(p.captions, offsetMs, cw, p.captionStyle, p.captionAnim, p.textPosition.y, p.captionSize)
+            if (p.captions.isNotEmpty()) overlays += CaptionOverlay(p.captions, offsetMs, cw, ch, p.captionStyle, p.captionAnim, p.textPosition.y, p.captionSize)
             p.stickers.forEach { st ->
                 val px = (cw * st.size).toInt().coerceAtLeast(32)
-                val bmp = if (st.imageUri != null) PhotoProcessor.decode(ctx, Uri.parse(st.imageUri), px) else emojiBitmap(st.emoji, px)
-                if (bmp != null) overlays += TimedBitmapOverlay(bmp, offsetMs, st)
+                val bmp = if (st.imageUri != null) PhotoProcessor.decodeToWidth(ctx, Uri.parse(st.imageUri), px) else emojiBitmap(st.emoji, px)
+                if (bmp != null) overlays += TimedBitmapOverlay(bmp, offsetMs, st, cw, ch)
             }
             if (p.watermark.isNotBlank()) overlays += watermarkOverlay(p.watermark.trim(), cw)
             fadeFor(p.transition, idx, p.clips.size, cw, ch, c.outputMs)?.let { overlays += it }
@@ -203,6 +203,12 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
         ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "Video"
 
     fun update(f: (VideoProject) -> VideoProject) = _project.update(f)
+
+    suspend fun addPicture(uri: Uri): Boolean {
+        val copy = withContext(Dispatchers.IO) { OverlayFiles.import(getApplication(), uri) } ?: return false
+        _project.update { it.copy(stickers = it.stickers + VideoSticker(imageUri = copy.toString(), size = 0.3f, y = 0f)) }
+        return true
+    }
 
     /** Replaces the project with freshly captured/picked clips (used by the camera hand-off). */
     fun startWith(uris: List<Uri>, canvas: CanvasPreset) {
@@ -280,6 +286,7 @@ fun VideoEditorScreen(vm: VideoViewModel, onBack: () -> Unit) {
     val snack = remember { SnackbarHostState() }
     var tab by remember { mutableIntStateOf(0) }
     var sel by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
     var overlaySel by remember { mutableStateOf<OverlaySel?>(null) }
     var posMs by remember { mutableLongStateOf(0L) }
     LaunchedEffect(error) { error?.let { snack.showSnackbar(it); vm.clearError() } }
@@ -290,7 +297,7 @@ fun VideoEditorScreen(vm: VideoViewModel, onBack: () -> Unit) {
         if (ok) vm.startRecording() else vm.update { it }.also { /* denied: nothing recorded */ }
     }
     val overlayPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) { vm.update { it.copy(stickers = it.stickers + VideoSticker(imageUri = uri.toString(), size = 0.3f, y = 0f)) }; overlaySel = OverlaySel(1, vm.project.value.stickers.lastIndex) }
+        if (uri != null) scope.launch { if (vm.addPicture(uri)) overlaySel = OverlaySel(1, vm.project.value.stickers.lastIndex) }
     }
     fun pickVideos() = videoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
 

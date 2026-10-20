@@ -23,6 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 /** Which overlay is being edited: kind 0 = caption, 1 = sticker/picture. */
 data class OverlaySel(val kind: Int, val index: Int)
@@ -72,7 +74,10 @@ fun OverlayLayer(p: VideoProject, posMs: Long, sel: OverlaySel?, editing: Boolea
             if (active || (editing && sel == s)) {
                 val sizeDp = with(density) { (w * st.size).toDp() }
                 val m = Modifier.align(BiasAlignment(st.x, -st.y)).layer(s, active)
-                if (st.imageUri != null) AsyncImage(st.imageUri, "Picture", m.width(sizeDp).graphicsRotation(st.rotation), contentScale = ContentScale.FillWidth)
+                if (st.imageUri != null) {
+                    var failed by androidx.compose.runtime.remember(st.imageUri) { androidx.compose.runtime.mutableStateOf(false) }
+                    if (!failed) AsyncImage(st.imageUri, "Picture", m.width(sizeDp).graphicsRotation(st.rotation), contentScale = ContentScale.FillWidth, onError = { failed = true })
+                }
                 else Text(st.emoji, m.graphicsRotation(st.rotation), fontSize = with(density) { (w * st.size * 0.85f).toSp() })
             }
         }

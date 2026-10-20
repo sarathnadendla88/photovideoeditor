@@ -93,7 +93,10 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onBack: () -> Unit) {
         }
     }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) { commit(stack.current.copy(images = stack.current.images + ImageLayer(uri.toString()))); selImage = stack.current.images.lastIndex; layerKind = 1 }
+        if (uri != null) scope.launch {
+            val local = withContext(Dispatchers.IO) { OverlayFiles.import(ctx, uri) } ?: uri
+            commit(stack.current.copy(images = stack.current.images + ImageLayer(local.toString()))); selImage = stack.current.images.lastIndex; layerKind = 1
+        }
     }
     LaunchedEffect(initialUri) { if (initialUri != null && source == null) open(initialUri) }
 
