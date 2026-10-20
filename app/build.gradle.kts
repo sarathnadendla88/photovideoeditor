@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.studio.photovideo"
+    namespace = "com.sarath.photovideo"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.studio.photovideo"
+        applicationId = "com.sarath.photovideo"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -47,6 +47,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$camerax")
     implementation("androidx.camera:camera-video:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
+    implementation("com.google.android.gms:play-services-ads:25.2.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-video:2.7.0")
     implementation("androidx.exifinterface:exifinterface:1.4.1")

@@ -1,4 +1,4 @@
-# Photo Video Studio (Phase 1 proof of concept)
+# ReelMint: Video & Photo Editor
 
 Offline-first Android slideshow maker. Product direction lives in `claude.md`.
 
@@ -25,9 +25,23 @@ Offline-first Android slideshow maker. Product direction lives in `claude.md`.
 
 Known limits: the video preview plays music and voiceover in step with the clips (separate players), so tiny sync drift is possible and clip speed is not reflected; video filter presets use their linear colour part only (offsets cannot be expressed in Media3's RGB matrix); the video preview shows overlays on the export canvas but not speed changes (overlay timing in the preview ignores speed), and; the slideshow preview is a still approximation.
 
+## Branding
+App name `ReelMint: Video & Photo Editor` (strings.xml `app_name`, shown in system App info); launcher label is the short `ReelMint`. Adaptive launcher icon (film reel with play button, mint→violet gradient, plus a themed monochrome layer) lives in `res/drawable/ic_launcher_*.xml`; `store/ic_launcher-playstore.png` is the 512×512 icon for the Play Console listing.
+
+## Privacy policy
+`docs/privacy-policy.html` (and `.md`) is the policy for Play and AdMob. Fill the four `[YOUR …]` placeholders (name, contact email, optional address), host the HTML on a public URL (for example GitHub Pages: push `docs/` and enable Pages), and paste that URL into the Play Console and AdMob. `docs/play-data-safety.md` has the matching Data safety answers. Not legal advice: have it reviewed if you can.
+
+## Ads (Google AdMob)
+- Banner on the **home screen only**; a full-screen ad **after an export is saved and you tap Done**, at most once every 3 exports and only if one is already loaded. Never inside an editor, never before saving, never blocks export or sharing.
+- Consent: Google's User Messaging Platform (UMP) runs at startup; no ad is requested until consent allows it. A "Privacy options" button appears in Settings when the user's region requires it.
+- Permissions added for this: INTERNET, ACCESS_NETWORK_STATE, AD_ID. Media is never uploaded; the Settings/privacy text says ads exist and what AdMob collects.
+- **IDs**: release builds use the real AdMob ids in `app/src/main/res/values/strings.xml` (publisher 3616682474690401: app `…~2596473164`, banner `…/7868981145`, interstitial `…/4668102735`). **Debug builds always use Google's test ids** (`app/src/debug/res/values/ad_test_ids.xml`) so development never produces invalid traffic. Never tap your own live ads.
+- Real ads will not fill until the app is published, linked in AdMob (App settings → App store details) and approved; the new units can take up to an hour. Empty banner space is hidden, so an unfilled banner shows nothing.
+- Still to do before earning: publish on Google Play, publish the AdMob consent message (Privacy & messaging), add a public privacy-policy URL, fill the Play Data safety form, set up AdMob payments. Not built: "Remove ads" purchase / premium (needs Google Play Billing; see claude.md section 6).
+
 ## Stack
-Kotlin 2.2.20, AGP 8.13.2, Gradle 8.13, Compose BOM 2025.09.00, Media3 1.8.1 (transformer/effect), CameraX 1.5.1, Coil 2.7.0, ML Kit selfie segmentation 16.0.0-beta6 (bundled model, offline). minSdk 26, target 35.
-Permissions: CAMERA and RECORD_AUDIO (asked when you open the camera or tap Record voiceover). No INTERNET permission; no analytics/ads SDKs.
+Kotlin 2.2.20, AGP 8.13.2, Gradle 8.13, Compose BOM 2025.09.00, Media3 1.8.1 (transformer/effect), CameraX 1.5.1, Coil 2.7.0, Google Mobile Ads 25.2.0 (+ UMP consent), ML Kit selfie segmentation 16.0.0-beta6 (bundled model, offline). minSdk 26, target 35.
+Permissions: CAMERA and RECORD_AUDIO (asked when you open the camera or tap Record voiceover); INTERNET, ACCESS_NETWORK_STATE and AD_ID for Google Mobile Ads only. Editing works offline. No analytics SDK.
 
 ## Build / test
     ./gradlew :app:assembleDebug :app:testDebugUnitTest

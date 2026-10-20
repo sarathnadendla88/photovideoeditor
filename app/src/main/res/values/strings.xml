@@ -1,3 +1,9 @@
 <resources>
-    <string name="app_name">Photo Video Studio</string>
+    <string name="app_name">ReelMint: Video &amp; Photo Editor</string>
+    <!-- Short label shown under the launcher icon (the full name is cut off there). -->
+    <string name="launcher_name">ReelMint</string>
+    <!-- Real AdMob ids (publisher 3616682474690401). Debug builds override these with Google test ids in src/debug/res/values/ad_test_ids.xml. -->
+    <string name="admob_app_id" translatable="false">ca-app-pub-3616682474690401~2596473164</string>
+    <string name="admob_banner_id" translatable="false">ca-app-pub-3616682474690401/7868981145</string>
+    <string name="admob_interstitial_id" translatable="false">ca-app-pub-3616682474690401/4668102735</string>
 </resources>
