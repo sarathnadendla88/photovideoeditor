@@ -123,3 +123,57 @@ class EdgeFitTest {
         assertEquals(500f, PhotoProcessor.clampCentre(10f, 1200f, 1000f), 0f)
     }
 }
+
+class RingtoneRangeTest {
+    @Test fun initialSelectionIsThirtySecondsOrWholeSong() {
+        assertEquals(0L to 30_000L, RingtoneRange.initial(200_000))
+        assertEquals(0L to 6_000L, RingtoneRange.initial(6_000))
+    }
+
+    @Test fun anyLengthIsAllowed() {
+        val (s, e) = RingtoneRange.clamp(10_000, 180_000, 200_000, movedStart = false)
+        assertEquals(10_000L, s); assertEquals(180_000L, e)
+        assertTrue(RingtoneRange.isLong(s, e)); assertFalse(RingtoneRange.isLong(0, 40_000))
+    }
+
+    @Test fun tooShortSelectionIsStretchedToOneSecond() {
+        val (s, e) = RingtoneRange.clamp(5_000, 5_200, 200_000, movedStart = false)
+        assertEquals(1_000L, e - s)
+        val (s2, e2) = RingtoneRange.clamp(9_900, 10_000, 200_000, movedStart = true)
+        assertEquals(10_000L, e2); assertEquals(9_000L, s2)
+    }
+
+    @Test fun neverLeavesTheSong() {
+        val (s, e) = RingtoneRange.clamp(-500, 999_999, 30_000, movedStart = false)
+        assertTrue(s >= 0 && e <= 30_000)
+    }
+}
+
+class CanvasMatchTest {
+    @Test fun matchesAspectRatios() {
+        assertEquals(CanvasPreset.LANDSCAPE, CanvasPreset.matching(1920, 1080))
+        assertEquals(CanvasPreset.PORTRAIT, CanvasPreset.matching(1080, 1920))
+        assertEquals(CanvasPreset.SQUARE, CanvasPreset.matching(1000, 1000))
+        assertEquals(CanvasPreset.PORTRAIT, CanvasPreset.matching(0, 0))
+    }
+}
+
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [34])
+class FreezeFrameTest {
+    private val u = android.net.Uri.parse("content://x/1")
+    private val frame = VideoClip(android.net.Uri.parse("file:///f.jpg"), "Freeze frame", 2000, freeze = true)
+
+    @Test fun freezeSplitsAndInsertsAHold() {
+        val p = VideoProject(clips = listOf(VideoClip(u, "c", 10_000))).freezeAt(0, 4_000, frame)
+        assertEquals(3, p.clips.size)
+        assertTrue(p.clips[1].freeze); assertFalse(p.clips[0].freeze); assertFalse(p.clips[2].freeze)
+        assertEquals(4_000L, p.clips[0].lengthMs); assertEquals(6_000L, p.clips[2].lengthMs)
+        assertEquals(12_000L, p.totalMs)
+    }
+
+    @Test fun freezeNearAnEdgeIsRejected() {
+        val p = VideoProject(clips = listOf(VideoClip(u, "c", 10_000)))
+        assertSame(p, p.freezeAt(0, 100, frame))
+    }
+}

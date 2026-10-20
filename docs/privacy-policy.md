@@ -10,9 +10,11 @@ ReelMint lets you edit photos, cut and edit videos, make slideshows and collages
 ## 1. Your photos, videos and audio
 
 - Everything you pick, record or create is processed **on your device**. We do not upload, store on a server, view, analyse remotely or sell your photos, videos, voice recordings or music. We do not operate a server for the app.
-- You choose files through Android's own photo picker and file picker, so the app does not get access to your whole library.
+- You choose files through Android's own photo picker and file picker, or by sharing them to the app from another app, so the app does not get access to your whole library.
+- When you tap "Upload to YouTube", the app only hands the saved video to the YouTube app. We do not upload it ourselves and do not see your YouTube account.
 - The app never changes your original files. Edits are saved as **new files** in `Pictures/PhotoVideoStudio` and `Movies/PhotoVideoStudio` on your device. You can delete them at any time from the app's "Your creations" list or from your gallery.
 - Photos you add to a slideshow, and pictures you place on top of a photo or video, are **copied into the app's private storage** so a saved draft keeps working. Voice recordings and generated voiceovers are also kept in private storage until you remove them. Settings → "Clear temporary files" removes camera clips, voiceovers and unfinished exports. Uninstalling the app deletes all of this private data.
+- The Ringtone maker cuts the song you choose **on your device** and saves the clip in `Ringtones/ReelMint`. Songs are never uploaded. Only use music you have the right to use.
 - Features such as portrait background blur/removal run **on your device** using an on-device model. Your picture is not sent anywhere for this.
 - Text-to-speech voiceover uses your phone's own text-to-speech engine. If your device is set up to use a different speech provider, that provider's privacy policy applies to the text you type for that feature.
 
@@ -49,6 +51,7 @@ This information goes to Google and its advertising partners, **not to us**, and
 | Microphone | Record audio with a video or a voiceover, only when you choose to. |
 | Internet and network state | Needed only to load ads and the consent form. Editing works without a connection. |
 | Advertising ID | Used by Google's advertising SDK, subject to your consent choices. |
+| Modify system settings | Used only when you tap "Set as ringtone / notification / alarm" in the Ringtone maker. Android asks you to allow it first. |
 
 ## 6. Where your information is kept and for how long
 

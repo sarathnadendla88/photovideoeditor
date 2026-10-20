@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+    <!-- Only to let the Ringtone maker set your ringtone/notification/alarm when you tap the button; Android asks you first. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>
     <!-- No broad media permissions: media is selected through the system Photo Picker / SAF. -->
     <application
@@ -23,10 +25,24 @@
         <activity
             android:name=".MainActivity"
             android:label="@string/launcher_name"
+            android:launchMode="singleTask"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- "Share → ReelMint" from Gallery, Files, Drive, etc. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
     </application>

@@ -37,10 +37,25 @@ import coil.compose.AsyncImage
 class MainActivity : ComponentActivity() {
     private val vm: SlideshowViewModel by viewModels()
     private val videoVm: VideoViewModel by viewModels()
+    /** Files shared into the app from another app; consumed once by the UI. */
+    private var incoming by mutableStateOf<Incoming?>(null)
+
+    private fun readIncoming(intent: Intent?): Incoming? {
+        if (intent == null || (intent.action != Intent.ACTION_SEND && intent.action != Intent.ACTION_SEND_MULTIPLE)) return null
+        val uris = if (intent.action == Intent.ACTION_SEND) listOfNotNull(androidx.core.content.IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java))
+                   else androidx.core.content.IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java).orEmpty()
+        fun kind(u: android.net.Uri): String = runCatching { contentResolver.getType(u) }.getOrNull() ?: intent.type.orEmpty()
+        val videos = uris.filter { kind(it).startsWith("video") }
+        val images = uris.filter { kind(it).startsWith("image") }
+        return if (videos.isEmpty() && images.isEmpty()) null else Incoming(videos, images)
+    }
+
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); incoming = readIncoming(intent) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (savedInstanceState == null) incoming = readIncoming(intent)
         Ads.start(this)
         setContent {
             StudioTheme {
@@ -52,6 +67,15 @@ class MainActivity : ComponentActivity() {
                 var photoToEdit by remember { mutableStateOf<android.net.Uri?>(null) }
                 var cameraFor by rememberSaveable { mutableStateOf<Screen?>(null) }       // set when the camera was opened from an editor
                 var collagePhoto by remember { mutableStateOf<android.net.Uri?>(null) }
+                LaunchedEffect(incoming) {
+                    val inc = incoming ?: return@LaunchedEffect
+                    incoming = null; showIntro = false
+                    when {
+                        inc.videos.isNotEmpty() -> { videoVm.startWith(inc.videos); cameraFor = null; screen = Screen.VIDEO }
+                        inc.images.size > 1 -> { vm.addPhotos(inc.images); cameraFor = null; screen = Screen.SLIDESHOW }
+                        inc.images.isNotEmpty() -> { photoToEdit = inc.images.first(); cameraFor = null; screen = Screen.PHOTO }
+                    }
+                }
                 fun takeFrom(from: Screen, mode: CameraMode) { cameraFor = from; cameraMode = mode; screen = Screen.CAMERA }
                 BackHandler(screen != Screen.HOME) { screen = Screen.HOME }
                 if (showIntro) { Onboarding { prefs.edit().putBoolean("intro_done", true).apply(); showIntro = false }; return@StudioTheme }
@@ -79,6 +103,7 @@ class MainActivity : ComponentActivity() {
                                 cameraFor = null; screen = Screen.VIDEO
                             })
                     }
+                    Screen.RINGTONE -> RingtoneScreen { screen = Screen.HOME }
                     Screen.COLLAGE -> CollageScreen(collagePhoto, onConsumed = { collagePhoto = null }, onTakePhoto = { takeFrom(Screen.COLLAGE, CameraMode.PHOTO) }) { screen = Screen.HOME }
                     Screen.PHOTO -> PhotoEditorScreen(photoToEdit, onTakePhoto = { takeFrom(Screen.PHOTO, CameraMode.PHOTO) }) { photoToEdit = null; screen = Screen.HOME }
                     Screen.VIDEO -> VideoEditorScreen(videoVm, onTakeVideo = { takeFrom(Screen.VIDEO, CameraMode.VIDEO) }) { screen = Screen.HOME }
@@ -102,6 +127,10 @@ fun ExportDialog(state: ExportState, onCancel: () -> Unit, onDismiss: () -> Unit
         is ExportState.Done -> AlertDialog(
             onDismissRequest = onDismiss,
             title = { Text("Saved to Movies/PhotoVideoStudio") },
+            text = {
+                val ctx = LocalContext.current
+                TextButton(onClick = { shareToYouTube(ctx, state.uri) }) { Icon(Icons.Default.OndemandVideo, null); Spacer(Modifier.width(8.dp)); Text("Upload to YouTube") }
+            },
             confirmButton = { TextButton(onClick = { onShare(state.uri) }) { Text("Share") } },
             dismissButton = {
                 val activity = LocalContext.current.findActivity()
@@ -119,13 +148,22 @@ fun ExportDialog(state: ExportState, onCancel: () -> Unit, onDismiss: () -> Unit
     }
 }
 
+/** Hands the saved video to the YouTube app's own upload screen (you finish and publish it there); falls back to the share sheet. */
+fun shareToYouTube(ctx: android.content.Context, uri: android.net.Uri) {
+    val send = Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    try { ctx.startActivity(Intent(send).setPackage("com.google.android.youtube")) }
+    catch (e: android.content.ActivityNotFoundException) { ctx.startActivity(Intent.createChooser(send, "Share video")) }
+}
+
 fun shareVideo(ctx: android.content.Context, uri: android.net.Uri) {
     ctx.startActivity(Intent.createChooser(
         Intent(Intent.ACTION_SEND).setType("video/mp4").putExtra(Intent.EXTRA_STREAM, uri)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Share video"))
 }
 
-enum class Screen { HOME, PHOTO, VIDEO, SLIDESHOW, COLLAGE, CAMERA }
+data class Incoming(val videos: List<android.net.Uri>, val images: List<android.net.Uri>)
+
+enum class Screen { HOME, PHOTO, VIDEO, SLIDESHOW, COLLAGE, CAMERA, RINGTONE }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -171,6 +209,10 @@ fun HomeScreen(draftPhotos: Int, go: (Screen) -> Unit, useTemplate: (SlideshowTe
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ToolTile(Icons.Default.Face, "Portrait", "Blur / remove bg", Studio.Amber, Studio.Coral, Modifier.weight(1f)) { go(Screen.PHOTO) }
                 ToolTile(Icons.Default.RecordVoiceOver, "Voiceover", "Record or type", Studio.Teal, Studio.Violet, Modifier.weight(1f)) { go(Screen.VIDEO) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ToolTile(Icons.Default.NotificationsActive, "Ringtone", "Cut a song", Studio.Violet, Studio.Coral, Modifier.weight(1f)) { go(Screen.RINGTONE) }
+                Spacer(Modifier.weight(1f))
             }
             RecentCreations()
             Text("Slideshow templates", style = MaterialTheme.typography.titleMedium)

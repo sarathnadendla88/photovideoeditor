@@ -57,11 +57,17 @@ enum class TextPosition(val label: String, val y: Float) { TOP("Top", 0.7f), CEN
 data class VideoClip(
     val uri: Uri, val name: String, val durationMs: Long,
     val trimStartMs: Long = 0, val trimEndMs: Long = durationMs, val speed: Float = 1f, val ramp: SpeedRamp = SpeedRamp.NONE,
+    val width: Int = 0, val height: Int = 0,
+    /** A still frame held for [durationMs] (freeze frame). [uri] is a JPEG in app storage. */
+    val freeze: Boolean = false,
 ) {
     val lengthMs get() = (trimEndMs - trimStartMs).coerceAtLeast(0)
     /** Length in the exported video after the speed change. */
     val outputMs get() = rampedOutputMs(lengthMs, ramp, speed)
 }
+
+/** What the preview player depends on: it only reloads when one of these changes (not on speed, captions, etc.). */
+private data class PreviewKey(val uri: Uri, val start: Long, val end: Long, val freeze: Boolean, val durationMs: Long)
 
 data class Voiceover(val uri: Uri, val durationMs: Long, val fx: VoiceFx = VoiceFx.NORMAL)
 
@@ -71,6 +77,7 @@ data class VideoProject(
     val quality: ExportQuality = ExportQuality.HD,
     val muteOriginal: Boolean = false,
     val originalVolume: Float = 1f,
+    val originalVoice: VoiceFx = VoiceFx.NORMAL,
     val filter: PhotoFilter = PhotoFilter.NONE,
     val brightness: Float = 0f,   // -0.5..0.5
     val contrast: Float = 0f,     // -0.5..0.5
@@ -95,6 +102,12 @@ data class VideoProject(
     fun moveOverlay(sel: OverlaySel, dx: Float, dy: Float): VideoProject = when (sel.kind) {
         0 -> copy(captions = captions.mapIndexed { i, c -> if (i == sel.index) c.copy(x = (c.x + dx).coerceIn(-1f, 1f), y = (c.y + dy).coerceIn(-1f, 1f)) else c })
         else -> copy(stickers = stickers.mapIndexed { i, c -> if (i == sel.index) c.copy(x = (c.x + dx).coerceIn(-1f, 1f), y = (c.y + dy).coerceIn(-1f, 1f)) else c })
+    }
+    /** Splits clip [i] at [atMs] and inserts a [holdMs] freeze of [frame] between the halves. Returns this if the split point is too close to an edge. */
+    fun freezeAt(i: Int, atMs: Long, frame: VideoClip): VideoProject {
+        val split = split(i, atMs)
+        if (split === this) return this
+        return split.copy(clips = split.clips.toMutableList().also { it.add(i + 1, frame) })
     }
     fun applyLook(l: LookPreset) = copy(filter = l.filter, brightness = l.brightness, contrast = l.contrast, saturation = l.saturation)
     fun applyPlatform(pl: Platform) = copy(canvas = pl.canvas, quality = pl.quality)
@@ -135,10 +148,11 @@ fun buildVideoComposition(ctx: android.content.Context, p: VideoProject): Compos
     var offsetMs = 0L
     val items = p.clips.mapIndexed { idx, c ->
         val clip = MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.trimStartMs).setEndPositionMs(c.trimEndMs).build()
-        val provider = if (c.speed != 1f || c.ramp != SpeedRamp.NONE) RampSpeedProvider(c.lengthMs * 1000, c.ramp, c.speed) else null
+        val provider = if (!c.freeze && (c.speed != 1f || c.ramp != SpeedRamp.NONE)) RampSpeedProvider(c.lengthMs * 1000, c.ramp, c.speed) else null
         val audioFx = buildList<androidx.media3.common.audio.AudioProcessor> {
             if (provider != null) add(SpeedChangingAudioProcessor(provider))
             if (p.originalVolume != 1f) add(SlideshowExporter.volumeProcessor(p.originalVolume))
+            if (p.originalVoice != VoiceFx.NORMAL) add(androidx.media3.common.audio.SonicAudioProcessor().apply { setPitch(p.originalVoice.pitch) })
         }
         val videoFx = buildList<Effect> {
             if (provider != null) add(SpeedChangeEffect(provider))
@@ -156,7 +170,11 @@ fun buildVideoComposition(ctx: android.content.Context, p: VideoProject): Compos
             if (overlays.isNotEmpty()) add(OverlayEffect(overlays))
         }
         offsetMs += c.outputMs
-        EditedMediaItem.Builder(MediaItem.Builder().setUri(c.uri).setClippingConfiguration(clip).build())
+        if (c.freeze) EditedMediaItem.Builder(MediaItem.Builder().setUri(c.uri).setImageDurationMs(c.durationMs).build())
+            .setFrameRate(30).setDurationUs(c.durationMs * 1000)
+            .setEffects(Effects(emptyList(), videoFx))
+            .build()
+        else EditedMediaItem.Builder(MediaItem.Builder().setUri(c.uri).setClippingConfiguration(clip).build())
             .setRemoveAudio(p.muteOriginal)
             .setEffects(Effects(audioFx, videoFx))
             .build()
@@ -186,23 +204,53 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
     private val exporter = SlideshowExporter(app)
     private val recorder = VoiceRecorder(app)
 
-    fun addVideos(uris: List<Uri>) = viewModelScope.launch {
+    fun addVideos(uris: List<Uri>, autoCanvas: Boolean = false) = viewModelScope.launch {
         val clips = withContext(Dispatchers.IO) { uris.mapNotNull { probe(it) } }
         if (clips.size < uris.size) _error.value = "Some videos couldn't be read and were skipped."
-        _project.update { it.copy(clips = it.clips + clips) }
+        _project.update { p ->
+            // For imported videos, match the canvas to the first clip so it isn't letterboxed into a vertical frame.
+            val canvas = if (autoCanvas) clips.firstOrNull()?.let { CanvasPreset.matching(it.width, it.height) } ?: p.canvas else p.canvas
+            p.copy(clips = p.clips + clips, canvas = canvas)
+        }
     }
     private fun probe(uri: Uri): VideoClip? = runCatching {
         val r = MediaMetadataRetriever()
         try {
             r.setDataSource(getApplication(), uri)
             val d = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: return null
-            VideoClip(uri, name(uri), d)
+            val w = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            val h = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rot = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            val swap = rot == 90 || rot == 270
+            VideoClip(uri, name(uri), d, width = if (swap) h else w, height = if (swap) w else h)
         } finally { r.release() }
     }.getOrNull()
     private fun name(uri: Uri) = getApplication<Application>().contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
         ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "Video"
 
     fun update(f: (VideoProject) -> VideoProject) = _project.update(f)
+
+    /** Grabs the frame at [atMs] of clip [i] and holds it for [holdMs] (default 2 s) in the timeline. */
+    fun freezeFrame(i: Int, atMs: Long, holdMs: Long = 2000L) = viewModelScope.launch {
+        val clip = _project.value.clips.getOrNull(i) ?: return@launch
+        if (clip.freeze) return@launch
+        val file = withContext(Dispatchers.IO) {
+            runCatching {
+                val r = MediaMetadataRetriever()
+                try {
+                    r.setDataSource(getApplication(), clip.uri)
+                    val bmp = r.getFrameAtTime(atMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST) ?: error("no frame")
+                    val dir = File(getApplication<Application>().filesDir, "freeze").apply { mkdirs() }
+                    File(dir, "freeze_${System.nanoTime()}.jpg").also { f -> f.outputStream().use { bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 92, it) } }
+                } finally { r.release() }
+            }.getOrNull()
+        }
+        if (file == null) { _error.value = "Couldn't capture that frame."; return@launch }
+        val frame = VideoClip(Uri.fromFile(file), "Freeze frame", holdMs, width = clip.width, height = clip.height, freeze = true)
+        val before = _project.value
+        val after = before.freezeAt(i, atMs, frame)
+        if (after === before) { file.delete(); _error.value = "Pick a point a little away from the clip's start or end." } else _project.value = after
+    }
 
     suspend fun addPicture(uri: Uri): Boolean {
         val copy = withContext(Dispatchers.IO) { OverlayFiles.import(getApplication(), uri) } ?: return false
@@ -211,9 +259,9 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Replaces the project with freshly captured/picked clips (used by the camera hand-off). */
-    fun startWith(uris: List<Uri>, canvas: CanvasPreset) {
-        _project.value = VideoProject(canvas = canvas)
-        addVideos(uris)
+    fun startWith(uris: List<Uri>, canvas: CanvasPreset? = null) {
+        _project.value = VideoProject(canvas = canvas ?: CanvasPreset.PORTRAIT)
+        addVideos(uris, autoCanvas = canvas == null)
     }
 
     private val _speaking = MutableStateFlow(false)
@@ -343,16 +391,18 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
         }
     }
     LaunchedEffect(p.music?.startMs) { if (p.music != null) syncLayers() }
+    LaunchedEffect(p.originalVoice) { player.playbackParameters = androidx.media3.common.PlaybackParameters(1f, p.originalVoice.pitch) }
     LaunchedEffect(p.voiceover?.fx) { voicePlayer.playbackParameters = androidx.media3.common.PlaybackParameters(1f, p.voiceover?.fx?.pitch ?: 1f) }
     LaunchedEffect(p.voiceover?.uri) {
         val v = p.voiceover
         if (v == null) { voicePlayer.stop(); voicePlayer.clearMediaItems() } else { voicePlayer.setMediaItem(MediaItem.fromUri(v.uri)); voicePlayer.prepare(); syncLayers() }
     }
-    LaunchedEffect(p.clips, p.filter, p.brightness, p.contrast, p.saturation) {
+    LaunchedEffect(p.clips.map { PreviewKey(it.uri, it.trimStartMs, it.trimEndMs, it.freeze, it.durationMs) }, p.filter, p.brightness, p.contrast, p.saturation) {
         delay(300)
         player.setVideoEffects(videoColorEffects(p))
         player.setMediaItems(p.clips.map { c ->
-            MediaItem.Builder().setUri(c.uri).setClippingConfiguration(
+            if (c.freeze) MediaItem.Builder().setUri(c.uri).setImageDurationMs(c.durationMs).build()
+            else MediaItem.Builder().setUri(c.uri).setClippingConfiguration(
                 MediaItem.ClippingConfiguration.Builder().setStartPositionMs(c.trimStartMs).setEndPositionMs(c.trimEndMs).build()).build()
         })
         player.prepare()
@@ -371,7 +421,7 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp).clip(Studio.CardShape).background(if (p.clips.isEmpty()) MaterialTheme.colorScheme.surfaceContainer else Color.Black), contentAlignment = Alignment.Center) {
-                if (p.clips.isEmpty()) EmptyState(Icons.Default.VideoLibrary, "Add your videos", "Trim, split, change speed, add text, music and a voiceover, then export an MP4.", "Add videos", ::pickVideos, "Record a video", onTakeVideo)
+                if (p.clips.isEmpty()) EmptyState(Icons.Default.VideoLibrary, "Add your videos", "Trim, split, change speed, add text, music and a voiceover, then export an MP4. Tip: in Gallery or Files, Share a video to ReelMint to open it here.", "Add videos", ::pickVideos, "Record a video", onTakeVideo)
                 else {
                     // The frame has the export canvas shape, so captions/stickers sit exactly where they will in the file.
                     Box(Modifier.fillMaxHeight().aspectRatio(p.canvas.width.toFloat() / p.canvas.height).background(Color.Black)) {
@@ -403,6 +453,7 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                             LabeledSlider("Split point", splitAt, c.trimStartMs.toFloat()..c.trimEndMs.toFloat().coerceAtLeast(c.trimStartMs + 1f), fmtMs(splitAt.toLong())) { splitAt = it }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton({ vm.update { it.split(i, splitAt.toLong()) } }) { Icon(Icons.Default.ContentCut, null); Text(" Split") }
+                                if (!c.freeze) OutlinedButton({ vm.freezeFrame(i, splitAt.toLong()) }) { Icon(Icons.Default.AcUnit, null); Text(" Freeze") }
                                 IconButton({ vm.update { it.move(i, i - 1) }; sel = i - 1 }, enabled = i > 0) { Icon(Icons.Default.ArrowBack, "Move earlier") }
                                 IconButton({ vm.update { it.move(i, i + 1) }; sel = i + 1 }, enabled = i < p.clips.lastIndex) { Icon(Icons.Default.ArrowForward, "Move later") }
                                 IconButton({ vm.update { it.remove(i) } }) { Icon(Icons.Default.Delete, "Remove clip") }
@@ -479,7 +530,11 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                     }
                     3 -> {
                         Row(verticalAlignment = Alignment.CenterVertically) { Switch(p.muteOriginal, { m -> vm.update { it.copy(muteOriginal = m) } }); Spacer(Modifier.width(8.dp)); Text("Mute original audio") }
-                        if (!p.muteOriginal) LabeledSlider("Original volume", p.originalVolume, 0f..1f, "${(p.originalVolume * 100).toInt()}%") { v -> vm.update { it.copy(originalVolume = v) } }
+                        if (!p.muteOriginal) {
+                            LabeledSlider("Original volume", p.originalVolume, 0f..1f, "${(p.originalVolume * 100).toInt()}%") { v -> vm.update { it.copy(originalVolume = v) } }
+                            Text("Voice changer for the original sound", style = MaterialTheme.typography.labelMedium)
+                            ChipRow(VoiceFx.entries, p.originalVoice, { it.label }) { f -> vm.update { it.copy(originalVoice = f) } }
+                        }
                         HorizontalDivider()
                         FilledTonalButton({ audioPicker.launch(arrayOf("audio/*")) }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.LibraryMusic, null); Spacer(Modifier.width(8.dp)); Text(if (p.music == null) "Add music" else "Change music") }
                         p.music?.let { m ->

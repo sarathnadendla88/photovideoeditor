@@ -9,7 +9,16 @@ import androidx.compose.material.icons.filled.*
 enum class CanvasPreset(val label: String, val width: Int, val height: Int) {
     PORTRAIT("9:16", 720, 1280),
     SQUARE("1:1", 1080, 1080),
-    LANDSCAPE("16:9", 1280, 720),
+    LANDSCAPE("16:9", 1280, 720);
+
+    companion object {
+        /** Closest preset for a clip of the given size (unknown size → vertical). */
+        fun matching(width: Int, height: Int): CanvasPreset {
+            if (width <= 0 || height <= 0) return PORTRAIT
+            val r = width.toFloat() / height
+            return when { r >= 1.2f -> LANDSCAPE; r <= 0.85f -> PORTRAIT; else -> SQUARE }
+        }
+    }
 }
 
 /** Output size multiplier relative to the preset's base resolution. */
