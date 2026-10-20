@@ -49,5 +49,13 @@ App name `ReelMint: Video & Photo Editor` (strings.xml `app_name`, shown in syst
 Kotlin 2.2.20, AGP 8.13.2, Gradle 8.13, Compose BOM 2025.09.00, Media3 1.8.1 (transformer/effect), CameraX 1.5.1, Coil 2.7.0, Google Mobile Ads 25.2.0 (+ UMP consent), ML Kit selfie segmentation 16.0.0-beta6 (bundled model, offline). minSdk 26, target 35.
 Permissions: CAMERA and RECORD_AUDIO (asked when you open the camera or tap Record voiceover); INTERNET, ACCESS_NETWORK_STATE and AD_ID for Google Mobile Ads only; WRITE_SETTINGS so the Ringtone maker can set your ringtone when you tap the button (Android asks you first). Editing works offline. No analytics SDK.
 
+## Testing
+- **Unit tests** (JVM): `./gradlew :app:testDebugUnitTest`.
+- **On-device tests** (`app/src/androidTest`): `VideoPipelineTest` runs real exports and measures the output files (length, audio/video in step, size, mute, music, freeze, speed, ringtone cut); `HomeNavigationTest` opens every screen, Settings, the intro and the share-in flows; `ScreenFlowTest` drives the photo editor, collage, slideshow and video editor through their real UI and checks the saved files.
+- They read fixtures from the app's external files dir, which is wiped when the app is uninstalled, so push them first:
+  `adb shell mkdir -p /sdcard/Android/data/com.sarath.photovideo/files` then push `test_av.mp4` (a video **with AAC audio**), `test_tone.wav`, `p0.jpg`, `p1.jpg`, `p2.jpg` there. Run with `adb shell am instrument -w com.sarath.photovideo.test/androidx.test.runner.AndroidJUnitRunner` (do not use `connectedAndroidTest`, it uninstalls the app and deletes the fixtures).
+- Real-phone check (Motorola edge 60 Pro, Android 17): the 13 pipeline tests, 23 navigation/screen tests, and a hand run of photo capture, flash, timer, front/back switch, video recording, Reel recording and the Reel→editor hand-off all passed. Never drive a physical phone with blind coordinate taps; use a guarded helper that checks the foreground app first.
+- Known limit: a clip whose audio is AMR-NB (what the emulator's virtual camera records) decodes to more audio than video. Each clip's audio is now cut at the clip's length, which reduced the overshoot from ~0.74 s to ~0.38 s on that clip (the rest is the 8 kHz AAC encoder's frame size). AAC clips (real phone cameras, WhatsApp, our own exports) are exact.
+
 ## Build / test
     ./gradlew :app:assembleDebug :app:testDebugUnitTest

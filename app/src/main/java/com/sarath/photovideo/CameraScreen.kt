@@ -226,7 +226,7 @@ private fun CameraContent(
         message?.let { Text(it, color = Color.White, modifier = Modifier.background(Color(0xCC000000), RoundedCornerShape(12.dp)).padding(horizontal = 14.dp, vertical = 8.dp)) }
         if (mode == CameraMode.REELS) {
             LinearProgressIndicator(progress = { (reelTotalMs / REEL_MAX_MS.toFloat()).coerceIn(0f, 1f) }, Modifier.fillMaxWidth(0.8f).height(6.dp).clip(RoundedCornerShape(3.dp)), color = Studio.Coral, trackColor = Color(0x55FFFFFF))
-            Text("${segments.size} clips · ${fmtMs(reelTotalMs)} of 1:00", color = Color.White, style = MaterialTheme.typography.labelMedium)
+            Text("${segments.size} clips · ${fmtMs(minOf(reelTotalMs, REEL_MAX_MS))} of 1:00", color = Color.White, style = MaterialTheme.typography.labelMedium)
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             if (mode == CameraMode.REELS && segments.isNotEmpty() && recording == null)

@@ -153,6 +153,7 @@ fun buildVideoComposition(ctx: android.content.Context, p: VideoProject): Compos
             if (provider != null) add(SpeedChangingAudioProcessor(provider))
             if (p.originalVolume != 1f) add(SlideshowExporter.volumeProcessor(p.originalVolume))
             if (p.originalVoice != VoiceFx.NORMAL) add(androidx.media3.common.audio.SonicAudioProcessor().apply { setPitch(p.originalVoice.pitch) })
+            if (!c.freeze) add(LimitAudioProcessor(c.outputMs))   // last: audio never outlasts this clip's picture
         }
         val videoFx = buildList<Effect> {
             if (provider != null) add(SpeedChangeEffect(provider))
@@ -431,7 +432,7 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                     Text("Preview: trim, order, look, audio & overlays", Modifier.align(Alignment.TopStart).padding(8.dp).background(Color(0x99000000)).padding(horizontal = 8.dp, vertical = 2.dp), color = Color.White, style = MaterialTheme.typography.labelMedium)
                 }
             }
-            Column(Modifier.fillMaxWidth().heightIn(max = 260.dp).verticalScroll(rememberScrollState()).padding(horizontal = Studio.Gutter, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.fillMaxWidth().heightIn(min = 300.dp, max = 360.dp).verticalScroll(rememberScrollState()).padding(horizontal = Studio.Gutter, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (tab) {
                     0 -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -553,9 +554,13 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                                 if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) vm.startRecording()
                                 else micPermission.launch(Manifest.permission.RECORD_AUDIO)
                             }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.Mic, null); Spacer(Modifier.width(8.dp)); Text(if (p.voiceover == null) "Record voiceover" else "Re-record voiceover") }
-                            p.voiceover?.let { v -> Text("${fmtMs(v.durationMs)} voiceover ready", style = MaterialTheme.typography.labelMedium); TextButton({ vm.update { it.copy(voiceover = null) } }) { Text("Remove") } }
                         }
                         p.voiceover?.let { v ->
+                            // Own row so the label and the Remove button are never squeezed next to the record button.
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("${fmtMs(v.durationMs)} voiceover ready", style = MaterialTheme.typography.labelMedium)
+                                TextButton({ vm.update { it.copy(voiceover = null) } }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Remove", maxLines = 1, softWrap = false) }
+                            }
                             Text("Voice effect", style = MaterialTheme.typography.labelMedium)
                             ChipRow(VoiceFx.entries, v.fx, { it.label }) { f -> vm.update { it.copy(voiceover = it.voiceover?.copy(fx = f)) } }
                         }

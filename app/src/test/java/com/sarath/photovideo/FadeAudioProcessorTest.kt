@@ -32,3 +32,18 @@ class FadeAudioProcessorTest {
         assertTrue(run(0, 0, 400, 400).all { it.toInt() == 10_000 })
     }
 }
+
+
+class LimitAudioProcessorTest {
+    private fun run(limitMs: Long, frames: Int): Int {
+        val p = LimitAudioProcessor(limitMs)
+        p.configure(AudioProcessor.AudioFormat(1000, 1, C.ENCODING_PCM_16BIT)); p.flush()
+        val inBuf = ByteBuffer.allocateDirect(frames * 2).order(ByteOrder.nativeOrder())
+        repeat(frames) { inBuf.putShort(1000) }; inBuf.flip()
+        p.queueInput(inBuf)
+        return p.output.remaining() / 2
+    }
+    @Test fun cutsAudioBeyondTheLimit() { assertEquals(300, run(300, 500)) }
+    @Test fun leavesShorterAudioUntouched() { assertEquals(200, run(300, 200)) }
+    @Test fun zeroLimitEmitsNothing() { assertEquals(0, run(0, 100)) }
+}

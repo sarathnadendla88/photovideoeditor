@@ -99,3 +99,31 @@ fun musicSequence(m: MusicTrack, totalMs: Long): EditedMediaItemSequence {
     }
     return EditedMediaItemSequence.Builder(items).build()
 }
+
+
+/**
+ * Passes audio through but drops everything after [limitMs]. Used so a clip's audio can never outlast its picture:
+ * some sources (for example AMR-NB from some cameras) decode to a little more audio than video, which would otherwise
+ * leave sound playing after the last frame. Shorter audio is left alone (never padded).
+ */
+class LimitAudioProcessor(private val limitMs: Long) : BaseAudioProcessor() {
+    private var framesLeft = 0L
+    override fun onConfigure(f: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+        if (f.encoding != androidx.media3.common.C.ENCODING_PCM_16BIT) throw AudioProcessor.UnhandledAudioFormatException(f)
+        framesLeft = limitMs * f.sampleRate / 1000
+        return f
+    }
+    override fun onFlush() { framesLeft = limitMs * inputAudioFormat.sampleRate / 1000 }
+    override fun queueInput(input: ByteBuffer) {
+        val frameBytes = 2 * inputAudioFormat.channelCount
+        val frames = input.remaining() / frameBytes
+        val keep = minOf(frames.toLong(), framesLeft).toInt()
+        if (keep > 0) {
+            val out = replaceOutputBuffer(keep * frameBytes)
+            val oldLimit = input.limit(); input.limit(input.position() + keep * frameBytes)
+            out.put(input); input.limit(oldLimit); out.flip()
+        }
+        framesLeft -= keep
+        input.position(input.limit())   // drop whatever is beyond the limit
+    }
+}
