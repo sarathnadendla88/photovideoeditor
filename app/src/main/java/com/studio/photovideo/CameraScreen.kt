@@ -54,6 +54,7 @@ private const val REEL_MAX_MS = 60_000L
 fun CameraScreen(
     initialMode: CameraMode, onBack: () -> Unit,
     onEditPhoto: (Uri) -> Unit, onEditVideo: (List<Uri>) -> Unit,
+    modes: List<CameraMode> = CameraMode.entries, useLabel: String? = null,
 ) {
     val ctx = LocalContext.current
     val owner = LocalLifecycleOwner.current
@@ -70,7 +71,7 @@ fun CameraScreen(
                 Button({ perms.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }) { Text("Allow access") }
                 TextButton(onBack) { Text("Not now") }
             }
-        } else CameraContent(mode, { mode = it }, owner, onBack, onEditPhoto, onEditVideo)
+        } else CameraContent(mode, { mode = it }, owner, onBack, onEditPhoto, onEditVideo, modes, useLabel)
     }
 }
 
@@ -81,6 +82,7 @@ private fun hasPermissions(ctx: android.content.Context) =
 private fun CameraContent(
     mode: CameraMode, setMode: (CameraMode) -> Unit, owner: androidx.lifecycle.LifecycleOwner,
     onBack: () -> Unit, onEditPhoto: (Uri) -> Unit, onEditVideo: (List<Uri>) -> Unit,
+    modes: List<CameraMode>, useLabel: String?,
 ) {
     val ctx = LocalContext.current
     val executor = remember { ContextCompat.getMainExecutor(ctx) }
@@ -242,7 +244,7 @@ private fun CameraContent(
         }
         // Always laid out (just hidden while recording) so the shutter button never jumps.
         Row(Modifier.alpha(if (recording == null) 1f else 0f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CameraMode.entries.forEach { m ->
+            if (modes.size > 1) modes.forEach { m ->
                 Text(m.label, Modifier.clip(RoundedCornerShape(50)).background(if (m == mode) Color.White else Color(0x66000000)).clickable(enabled = recording == null) { setMode(m) }.padding(horizontal = 16.dp, vertical = 6.dp),
                     color = if (m == mode) Color.Black else Color.White, fontWeight = FontWeight.SemiBold)
             }
@@ -250,8 +252,8 @@ private fun CameraContent(
     }
 
     }
-    savedPhoto?.let { uri -> CaptureDialog("Photo saved", "Saved to Pictures/PhotoVideoStudio.", "Edit photo", { savedPhoto = null; onEditPhoto(uri) }, { savedPhoto = null }) }
-    savedVideo?.let { uri -> CaptureDialog("Video saved", "Saved to Movies/PhotoVideoStudio.", "Edit video", { savedVideo = null; onEditVideo(listOf(uri)) }, { savedVideo = null }) }
+    savedPhoto?.let { uri -> CaptureDialog("Photo saved", "Saved to Pictures/PhotoVideoStudio.", useLabel ?: "Edit photo", { savedPhoto = null; onEditPhoto(uri) }, { savedPhoto = null }) }
+    savedVideo?.let { uri -> CaptureDialog("Video saved", "Saved to Movies/PhotoVideoStudio.", useLabel ?: "Edit video", { savedVideo = null; onEditVideo(listOf(uri)) }, { savedVideo = null }) }
 }
 
 @Composable

@@ -49,19 +49,39 @@ class MainActivity : ComponentActivity() {
                 var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
                 var cameraMode by rememberSaveable { mutableStateOf(CameraMode.PHOTO) }
                 var photoToEdit by remember { mutableStateOf<android.net.Uri?>(null) }
+                var cameraFor by rememberSaveable { mutableStateOf<Screen?>(null) }       // set when the camera was opened from an editor
+                var collagePhoto by remember { mutableStateOf<android.net.Uri?>(null) }
+                fun takeFrom(from: Screen, mode: CameraMode) { cameraFor = from; cameraMode = mode; screen = Screen.CAMERA }
                 BackHandler(screen != Screen.HOME) { screen = Screen.HOME }
                 if (showIntro) { Onboarding { prefs.edit().putBoolean("intro_done", true).apply(); showIntro = false }; return@StudioTheme }
                 if (showSettings) SettingsDialog({ showSettings = false }, { showSettings = false; showIntro = true })
                 when (screen) {
                     Screen.HOME -> HomeScreen(vm.project.collectAsStateWithLifecycle().value.photos.size, { screen = it }, vm::applyTemplate,
-                        openCamera = { cameraMode = it; screen = Screen.CAMERA }, openSettings = { showSettings = true })
-                    Screen.CAMERA -> CameraScreen(cameraMode, onBack = { screen = Screen.HOME },
-                        onEditPhoto = { photoToEdit = it; screen = Screen.PHOTO },
-                        onEditVideo = { uris -> videoVm.startWith(uris, if (cameraMode == CameraMode.REELS) CanvasPreset.PORTRAIT else CanvasPreset.PORTRAIT); screen = Screen.VIDEO })
-                    Screen.COLLAGE -> CollageScreen { screen = Screen.HOME }
-                    Screen.PHOTO -> PhotoEditorScreen(photoToEdit) { photoToEdit = null; screen = Screen.HOME }
-                    Screen.VIDEO -> VideoEditorScreen(videoVm) { screen = Screen.HOME }
-                    Screen.SLIDESHOW -> SlideshowScreen(vm) { screen = Screen.HOME }
+                        openCamera = { cameraFor = null; cameraMode = it; screen = Screen.CAMERA }, openSettings = { showSettings = true })
+                    Screen.CAMERA -> {
+                        val from = cameraFor
+                        val back = { cameraFor = null; screen = from ?: Screen.HOME }
+                        BackHandler { back() }
+                        CameraScreen(cameraMode, onBack = back,
+                            modes = when (from) { null -> CameraMode.entries; Screen.VIDEO -> listOf(CameraMode.VIDEO); else -> listOf(CameraMode.PHOTO) },
+                            useLabel = when (from) { Screen.PHOTO -> "Edit this photo"; Screen.SLIDESHOW -> "Add to slideshow"; Screen.COLLAGE -> "Add to collage"; Screen.VIDEO -> "Add to video"; else -> null },
+                            onEditPhoto = { uri ->
+                                when (from) {
+                                    Screen.SLIDESHOW -> { vm.addPhotos(listOf(uri)); screen = Screen.SLIDESHOW }
+                                    Screen.COLLAGE -> { collagePhoto = uri; screen = Screen.COLLAGE }
+                                    else -> { photoToEdit = uri; screen = Screen.PHOTO }
+                                }
+                                cameraFor = null
+                            },
+                            onEditVideo = { uris ->
+                                if (from == Screen.VIDEO) videoVm.addVideos(uris) else videoVm.startWith(uris, CanvasPreset.PORTRAIT)
+                                cameraFor = null; screen = Screen.VIDEO
+                            })
+                    }
+                    Screen.COLLAGE -> CollageScreen(collagePhoto, onConsumed = { collagePhoto = null }, onTakePhoto = { takeFrom(Screen.COLLAGE, CameraMode.PHOTO) }) { screen = Screen.HOME }
+                    Screen.PHOTO -> PhotoEditorScreen(photoToEdit, onTakePhoto = { takeFrom(Screen.PHOTO, CameraMode.PHOTO) }) { photoToEdit = null; screen = Screen.HOME }
+                    Screen.VIDEO -> VideoEditorScreen(videoVm, onTakeVideo = { takeFrom(Screen.VIDEO, CameraMode.VIDEO) }) { screen = Screen.HOME }
+                    Screen.SLIDESHOW -> SlideshowScreen(vm, onTakePhoto = { takeFrom(Screen.SLIDESHOW, CameraMode.PHOTO) }) { screen = Screen.HOME }
                 }
             }
         }

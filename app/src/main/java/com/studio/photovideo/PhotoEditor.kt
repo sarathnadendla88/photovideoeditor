@@ -43,7 +43,7 @@ private val tabs = listOf(
 private val emojis = listOf("😀", "😍", "🎉", "🎂", "❤️", "🔥", "⭐", "🌈", "🌸", "🐶", "🐱", "🎈", "👑", "🕶️", "🎵", "✈️")
 
 @Composable
-fun PhotoEditorScreen(initialUri: Uri? = null, onBack: () -> Unit) {
+fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var source by remember { mutableStateOf<Bitmap?>(null) }
@@ -141,6 +141,7 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snack) },
         topBar = {
             StudioTopBar("Photo Editor", onBack) {
+                if (source != null) IconButton(onTakePhoto) { Icon(Icons.Default.CameraAlt, "Take a new photo") }
                 IconButton({ stack.undo(); rev++ }, enabled = stack.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "Undo") }
                 IconButton({ stack.redo(); rev++ }, enabled = stack.canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "Redo") }
                 IconButton(onClick = {
@@ -174,9 +175,9 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onBack: () -> Unit) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp).background(MaterialTheme.colorScheme.surfaceContainer, Studio.CardShape), contentAlignment = Alignment.Center) {
                 val p = preview
                 if (p == null) {
-                    EmptyState(Icons.Default.AddPhotoAlternate, "Start with a photo", "Pick one from your gallery. Your original is never changed — edits are saved as a copy.", "Pick a photo") {
+                    EmptyState(Icons.Default.AddPhotoAlternate, "Start with a photo", "Pick one from your gallery. Your original is never changed — edits are saved as a copy.", "Pick a photo", {
                         picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    }
+                    }, "Take a photo", onTakePhoto)
                 } else {
                     PreviewWithDrawing(p, drawing = tab == 5 && !comparing, color = drawColor, width = drawWidth, cropRect = if (tab == 2 && !comparing) edit.cropRect else null, onCrop = { r -> commit(edit.copy(cropRect = r, crop = CropRatio.FREE)) }, onMove = if ((tab == 3 || tab == 4) && !comparing) moveLayer else null) { stroke -> commit(edit.copy(strokes = edit.strokes + stroke)) }
                     FilledTonalIconToggleButton(comparing, { comparing = it }, Modifier.align(Alignment.TopEnd).padding(8.dp)) { Icon(Icons.Default.Compare, "Hold to compare before and after") }

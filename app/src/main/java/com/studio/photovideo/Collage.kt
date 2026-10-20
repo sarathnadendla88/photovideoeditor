@@ -64,7 +64,7 @@ object CollageRenderer {
 }
 
 @Composable
-fun CollageScreen(onBack: () -> Unit) {
+fun CollageScreen(incoming: Uri? = null, onConsumed: () -> Unit = {}, onTakePhoto: () -> Unit = {}, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var photos by remember { mutableStateOf<List<Bitmap?>>(emptyList()) }
@@ -90,6 +90,9 @@ fun CollageScreen(onBack: () -> Unit) {
         }
         replacing = -1
     }
+    LaunchedEffect(incoming) {
+        if (incoming != null) { load(listOf(incoming)).firstOrNull()?.let { photos = (photos + it).take(9) }; onConsumed() }
+    }
     val preview = remember(photos, layout, shape, spacing, radius, bg) { CollageRenderer.render(photos, layout, shape, spacing, radius, bg, 720) }
 
     Scaffold(
@@ -109,9 +112,9 @@ fun CollageScreen(onBack: () -> Unit) {
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp).background(MaterialTheme.colorScheme.surfaceContainer, Studio.CardShape), contentAlignment = Alignment.Center) {
-                if (photos.isEmpty()) EmptyState(Icons.Default.GridView, "Make a collage", "Pick up to 9 photos, then choose a layout. Tap any cell later to swap its photo.", "Pick photos") {
+                if (photos.isEmpty()) EmptyState(Icons.Default.GridView, "Make a collage", "Pick up to 9 photos, then choose a layout. Tap any cell later to swap its photo.", "Pick photos", {
                     multi.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                } else {
+                }, "Take a photo", onTakePhoto) else {
                     val scale = if (box.width == 0) 1f else minOf(box.width / preview.width.toFloat(), box.height / preview.height.toFloat())
                     val w = preview.width * scale; val h = preview.height * scale
                     Box(Modifier.fillMaxSize().padding(8.dp).onSizeChanged { box = it }, contentAlignment = Alignment.Center) {
@@ -136,6 +139,7 @@ fun CollageScreen(onBack: () -> Unit) {
                 ChipRow(Palette.entries, bg, { it.label }) { bg = it }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton({ multi.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = photos.size < 9) { Text("Add photos") }
+                    OutlinedButton(onTakePhoto, enabled = photos.size < 9) { Text("Take photo") }
                     OutlinedButton({ photos = photos.shuffled() }) { Text("Shuffle") }
                     OutlinedButton({ photos = emptyList() }) { Text("Clear") }
                 }

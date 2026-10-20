@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -85,11 +86,12 @@ fun GradientCard(brush: Brush, modifier: Modifier = Modifier, onClick: () -> Uni
 }
 
 @Composable
-fun EmptyState(icon: ImageVector, title: String, body: String, action: String, onAction: () -> Unit) {
+fun EmptyState(icon: ImageVector, title: String, body: String, action: String, onAction: () -> Unit, secondAction: String? = null, onSecond: (() -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Icon(icon, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
         Text(title, style = MaterialTheme.typography.titleMedium)
         Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         Button(onAction, shape = RoundedCornerShape(16.dp)) { Text(action) }
+        if (secondAction != null && onSecond != null) OutlinedButton(onSecond, shape = RoundedCornerShape(16.dp)) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(8.dp)); Text(secondAction) }
     }
 }

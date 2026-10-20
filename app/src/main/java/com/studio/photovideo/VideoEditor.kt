@@ -275,7 +275,7 @@ private val tabs = listOf(
 private val speeds = listOf(0.25f, 0.5f, 1f, 1.5f, 2f, 3f)
 
 @Composable
-fun VideoEditorScreen(vm: VideoViewModel, onBack: () -> Unit) {
+fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: () -> Unit) {
     val p by vm.project.collectAsStateWithLifecycle()
     val export by vm.export.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
@@ -371,7 +371,7 @@ fun VideoEditorScreen(vm: VideoViewModel, onBack: () -> Unit) {
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp).clip(Studio.CardShape).background(if (p.clips.isEmpty()) MaterialTheme.colorScheme.surfaceContainer else Color.Black), contentAlignment = Alignment.Center) {
-                if (p.clips.isEmpty()) EmptyState(Icons.Default.VideoLibrary, "Add your videos", "Trim, split, change speed, add text, music and a voiceover, then export an MP4.", "Add videos", ::pickVideos)
+                if (p.clips.isEmpty()) EmptyState(Icons.Default.VideoLibrary, "Add your videos", "Trim, split, change speed, add text, music and a voiceover, then export an MP4.", "Add videos", ::pickVideos, "Record a video", onTakeVideo)
                 else {
                     // The frame has the export canvas shape, so captions/stickers sit exactly where they will in the file.
                     Box(Modifier.fillMaxHeight().aspectRatio(p.canvas.width.toFloat() / p.canvas.height).background(Color.Black)) {
@@ -386,6 +386,8 @@ fun VideoEditorScreen(vm: VideoViewModel, onBack: () -> Unit) {
                     0 -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(if (p.clips.isEmpty()) "No clips yet" else "${p.clips.size} clips · ${fmtMs(p.totalMs)}", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            OutlinedButton(onTakeVideo, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.Videocam, null); Spacer(Modifier.width(6.dp)); Text("Record") }
+                            Spacer(Modifier.width(8.dp))
                             FilledTonalButton(::pickVideos, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.VideoLibrary, null); Spacer(Modifier.width(6.dp)); Text("Add") }
                         }
                         if (p.clips.isNotEmpty()) {

@@ -37,7 +37,7 @@ private val tabs = listOf(
 )
 
 @Composable
-fun SlideshowScreen(vm: SlideshowViewModel, onBack: () -> Unit) {
+fun SlideshowScreen(vm: SlideshowViewModel, onTakePhoto: () -> Unit = {}, onBack: () -> Unit) {
     val project by vm.project.collectAsStateWithLifecycle()
     val export by vm.export.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
@@ -65,7 +65,7 @@ fun SlideshowScreen(vm: SlideshowViewModel, onBack: () -> Unit) {
         Column(Modifier.padding(pad).fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
                 if (project.photos.isEmpty()) {
-                    EmptyState(Icons.Default.PhotoLibrary, "Turn photos into a video", "Choose photos, pick a style, add music and export an MP4. Everything stays on your device.", "Choose photos", ::pickPhotos)
+                    EmptyState(Icons.Default.PhotoLibrary, "Turn photos into a video", "Choose photos, pick a style, add music and export an MP4. Everything stays on your device.", "Choose photos", ::pickPhotos, "Take a photo", onTakePhoto)
                 } else {
                     val ratio = project.canvas.width.toFloat() / project.canvas.height
                     Box(Modifier.fillMaxHeight().aspectRatio(ratio).clip(RoundedCornerShape(20.dp)).background(Color.Black)) {
@@ -84,6 +84,8 @@ fun SlideshowScreen(vm: SlideshowViewModel, onBack: () -> Unit) {
                     0 -> {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("${project.photos.size} photos · ${project.totalDurationMs / 1000}s", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            OutlinedButton(onTakePhoto, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(6.dp)); Text("Take") }
+                            Spacer(Modifier.width(8.dp))
                             FilledTonalButton(::pickPhotos, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.AddPhotoAlternate, null); Spacer(Modifier.width(6.dp)); Text("Add") }
                         }
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
