@@ -1,0 +1,7 @@
+## Copy to local.properties (git-ignored) and fill in. Android Studio adds sdk.dir itself.
+# Razorpay PUBLIC key id: rzp_test_... while testing, rzp_live_... for release. NEVER put the key secret here.
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
+# Optional payment server (https only; http://10.0.2.2:8080 works from an emulator). Leave out for app-only mode.
+#PAYMENT_API_URL=https://pay.example.com
+# Optional price in paise (default 5000 = ₹50)
+#PRO_PRICE_PAISE=5000

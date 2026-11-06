@@ -38,9 +38,10 @@ import kotlinx.coroutines.withContext
 private val tabs = listOf(
     ToolTab("Adjust", Icons.Default.Tune), ToolTab("Filters", Icons.Default.AutoAwesome), ToolTab("Crop", Icons.Default.Crop),
     ToolTab("Text", Icons.Default.TextFields), ToolTab("Stickers", Icons.Default.EmojiEmotions), ToolTab("Draw", Icons.Default.Brush),
-    ToolTab("Frame", Icons.Default.PhotoSizeSelectActual), ToolTab("Portrait", Icons.Default.Face),
+    ToolTab("Frame", Icons.Default.PhotoSizeSelectActual), ToolTab("Portrait", Icons.Default.Face), ToolTab("Effects", Icons.Default.AutoFixNormal),
 )
-private val emojis = listOf("😀", "😍", "🎉", "🎂", "❤️", "🔥", "⭐", "🌈", "🌸", "🐶", "🐱", "🎈", "👑", "🕶️", "🎵", "✈️")
+/** Order the tabs are shown in (Effects right after Filters); the editing logic keeps using the tab's own index. */
+private val tabOrder = listOf(0, 1, 8, 2, 3, 4, 5, 6, 7)
 
 @Composable
 fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onBack: () -> Unit) {
@@ -68,6 +69,7 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onB
     val snack = remember { SnackbarHostState() }
     val looks = remember { LookStore(ctx) }
     var myLooks by remember { mutableStateOf(looks.all()) }
+    val proGate = LocalProGate.current
     var saveLookDialog by remember { mutableStateOf(false) }
     var batchProgress by remember { mutableStateOf<String?>(null) }
     val edit = stack.current
@@ -85,7 +87,7 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onB
             var ok = 0
             uris.forEachIndexed { i, u ->
                 batchProgress = "Applying look ${i + 1} of ${uris.size}…"
-                val r = withContext(Dispatchers.IO) { runCatching { val b = PhotoProcessor.decode(ctx, u, 3072) ?: error("open"); PhotoProcessor.saveCopy(ctx, PhotoProcessor.apply(b, null, look), false) } }
+                val r = withContext(Dispatchers.IO) { runCatching { val b = PhotoProcessor.decode(ctx, u, 3072) ?: error("open"); PhotoProcessor.saveCopy(ctx, PhotoProcessor.apply(b, null, look.forSave(Pro.isPro)), false) } }
                 if (r.isSuccess) ok++
             }
             batchProgress = null
@@ -134,7 +136,10 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onB
         var name by remember { mutableStateOf("") }
         AlertDialog(onDismissRequest = { saveLookDialog = false }, title = { Text("Save this look") },
             text = { OutlinedTextField(name, { name = it.take(20) }, label = { Text("Name") }, singleLine = true) },
-            confirmButton = { TextButton({ if (name.isNotBlank()) { myLooks = looks.save(edit.toLook(name.trim())); saveLookDialog = false } }, enabled = name.isNotBlank()) { Text("Save") } },
+            confirmButton = { TextButton({ if (name.isNotBlank()) {
+                val n = name.trim()
+                if (myLooks.none { it.name == n } && !Entitlements.canSaveAnotherLook(myLooks.size, Pro.isPro)) { saveLookDialog = false; proGate("More than ${Entitlements.FREE_LOOKS} saved looks") }
+                else { myLooks = looks.save(edit.toLook(n)); saveLookDialog = false } } }, enabled = name.isNotBlank()) { Text("Save") } },
             dismissButton = { TextButton({ saveLookDialog = false }) { Text("Cancel") } })
     }
     Scaffold(
@@ -152,7 +157,7 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onB
                             runCatching {
                                 val full = PhotoProcessor.decode(ctx, src, 3072) ?: error("Could not open the original")
                                 val fullMask = if (stack.current.background != Background.KEEP) PhotoProcessor.segment(full) else null
-                                val out = PhotoProcessor.apply(full, fullMask, stack.current, imageLoader)
+                                val out = PhotoProcessor.apply(full, fullMask, stack.current.forSave(Pro.isPro), imageLoader)
                                 PhotoProcessor.saveCopy(ctx, out, transparent = stack.current.background == Background.REMOVE)
                             }
                         }
@@ -169,7 +174,7 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onB
                 }
             }
         },
-        bottomBar = { if (source != null) ToolTabBar(tabs, tab) { tab = it } },
+        bottomBar = { if (source != null) ToolTabBar(tabOrder.map { tabs[it] }, tabOrder.indexOf(tab)) { tab = tabOrder[it] } },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp).background(MaterialTheme.colorScheme.surfaceContainer, Studio.CardShape), contentAlignment = Alignment.Center) {
@@ -199,7 +204,7 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onB
                             TextButton({ commit(PhotoEdit()) }) { Text("Reset all edits") }
                         }
                         1 -> {
-                            ChipRow(PhotoFilter.entries, edit.filter, { it.label }) { commit(edit.copy(filter = it)) }
+                            ProChipRow(PhotoFilter.entries, edit.filter, { it.label }, { !Entitlements.filter(it, Pro.isPro) }, "Pro filters") { commit(edit.copy(filter = it)) }
                             Text("My looks", style = MaterialTheme.typography.labelMedium)
                             if (myLooks.isNotEmpty()) ChipRow(myLooks, null, { it.name }) { commit(edit.withLook(it)) }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -233,7 +238,7 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onB
                                 fun upd(n: TextLayer) = commit(edit.copy(texts = edit.texts.toMutableList().also { it[i] = n }))
                                 OutlinedTextField(t.text, { upd(t.copy(text = it)) }, label = { Text("Text") }, modifier = Modifier.fillMaxWidth())
                                 Text("Drag the text on the photo to move it", style = MaterialTheme.typography.labelMedium)
-                                ChipRow(TextFont.entries, t.font, { it.label }) { upd(t.copy(font = it)) }
+                                ProChipRow(TextFont.entries, t.font, { it.label }, { !Entitlements.font(it, Pro.isPro) }, "Pro fonts") { upd(t.copy(font = it)) }
                                 ChipRow(Palette.entries, t.color, { it.label }) { upd(t.copy(color = it)) }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     FilterChip(t.bold, { upd(t.copy(bold = !t.bold)) }, { Text("Bold") })
@@ -246,7 +251,7 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onB
                             }
                         }
                         4 -> {
-                            ChipRow(emojis, "", { it }) { commit(edit.copy(stickers = edit.stickers + Sticker(it))); selectedSticker = edit.stickers.size; layerKind = 0 }
+                            StickerShelf { commit(edit.copy(stickers = edit.stickers + Sticker(it))); selectedSticker = edit.stickers.size; layerKind = 0 }
                             OutlinedButton({ imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Icon(Icons.Default.AddPhotoAlternate, null); Text(" Add your own picture") }
                             if (edit.stickers.isNotEmpty()) ChipRow(edit.stickers.indices.toList(), if (layerKind == 0) selectedSticker else -1, { edit.stickers[it].emoji }) { selectedSticker = it; layerKind = 0 }
                             if (edit.images.isNotEmpty()) ChipRow(edit.images.indices.toList(), if (layerKind == 1) selImage else -1, { "Picture ${it + 1}" }) { selImage = it; layerKind = 1 }
@@ -277,8 +282,14 @@ fun PhotoEditorScreen(initialUri: Uri? = null, onTakePhoto: () -> Unit = {}, onB
                             TextButton({ commit(edit.copy(strokes = edit.strokes.dropLast(1))) }, enabled = edit.strokes.isNotEmpty()) { Text("Remove last stroke") }
                         }
                         6 -> {
+                            ProChipRow(FrameStyle.entries, edit.frameStyle, { it.label }, { !Entitlements.frame(it, Pro.isPro) }, "Pro photo frames") { commit(edit.copy(frameStyle = it)) }
                             LabeledSlider("Border width", edit.border, 0f..0.1f) { commit(edit.copy(border = it)) }
                             ChipRow(Palette.entries, edit.borderColor, { it.label }) { commit(edit.copy(borderColor = it)) }
+                        }
+                        8 -> {
+                            Text("Fun effects, all processed on your device", style = MaterialTheme.typography.labelMedium)
+                            ProChipRow(PhotoEffect.entries, edit.effect, { it.label }, { !Entitlements.effect(it, Pro.isPro) }, "Pro photo effects") { commit(edit.copy(effect = it)) }
+                            if (edit.effect != PhotoEffect.NONE && edit.effect != PhotoEffect.MIRROR) LabeledSlider("Strength", edit.effectStrength, 0f..1f) { commit(edit.copy(effectStrength = it)) }
                         }
                         7 -> {
                             Text("Detects the person on your device. No upload.", style = MaterialTheme.typography.labelMedium)

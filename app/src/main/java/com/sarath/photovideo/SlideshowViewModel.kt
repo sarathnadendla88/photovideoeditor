@@ -43,6 +43,8 @@ class SlideshowViewModel(app: Application) : AndroidViewModel(app) {
     fun setMotion(m: Motion) = _project.update { it.copy(motion = m) }
     fun setTitle(t: String) = _project.update { it.copy(title = t) }
     fun setEndText(t: String) = _project.update { it.copy(endText = t) }
+    fun setLogo(uri: Uri?) { viewModelScope.launch { val copy = if (uri == null) null else withContext(Dispatchers.IO) { drafts.importOverlay(uri) }; _project.update { it.copy(logoUri = copy?.toString()) } } }
+    fun setLogoCorner(c: LogoCorner) = _project.update { it.copy(logoCorner = c) }
     fun applyTemplate(t: SlideshowTemplate) = _project.update { it.applyTemplate(t) }
     fun setSlideCaption(uri: Uri, text: String) = _project.update { p -> p.copy(slideCaptions = if (text.isBlank()) p.slideCaptions - uri.toString() else p.slideCaptions + (uri.toString() to text.take(80))) }
     /** Copies the picture into app storage first so the draft keeps working after a restart. */
@@ -58,7 +60,29 @@ class SlideshowViewModel(app: Application) : AndroidViewModel(app) {
     fun setWatermark(t: String) = _project.update { it.copy(watermark = t.take(24)) }
     fun setFadeIn(ms: Long) = _project.update { p -> p.copy(music = p.music?.copy(fadeInMs = ms)) }
     fun setFadeOut(ms: Long) = _project.update { p -> p.copy(music = p.music?.copy(fadeOutMs = ms)) }
-    fun setMusicStart(ms: Long) = _project.update { p -> p.copy(music = p.music?.copy(startMs = ms)) }
+    fun setMusicStart(ms: Long) { _project.update { p -> p.copy(music = p.music?.copy(startMs = ms)) }; reanalyseIfNeeded() }
+
+    /** What the beat analysis is doing, for the UI. */
+    sealed interface BeatStatus { data object Idle : BeatStatus; data object Working : BeatStatus; data class Found(val bpm: Float) : BeatStatus; data object NotFound : BeatStatus }
+    private val _beatStatus = MutableStateFlow<BeatStatus>(BeatStatus.Idle)
+    val beatStatus: StateFlow<BeatStatus> = _beatStatus.asStateFlow()
+    private var beatJob: Job? = null
+
+    fun setBeatSync(on: Boolean) { _project.update { it.copy(beatSync = on) }; if (on) analyseBeats() else { beatJob?.cancel(); _beatStatus.value = BeatStatus.Idle } }
+    fun setBeatsPerPhoto(n: Int) = _project.update { it.copy(beatsPerPhoto = n) }
+    private fun reanalyseIfNeeded() { if (_project.value.beatSync) analyseBeats() }
+
+    /** Finds the beats of the chosen music part (off the main thread); until it finishes the normal photo length is used. */
+    fun analyseBeats() {
+        val m = _project.value.music ?: run { _beatStatus.value = BeatStatus.Idle; return }
+        beatJob?.cancel()
+        _beatStatus.value = BeatStatus.Working
+        beatJob = viewModelScope.launch {
+            val info = withContext(Dispatchers.Default) { BeatAnalyzer.analyse(getApplication(), m.uri, m.startMs) }
+            if (info == null) { _project.update { it.copy(beats = emptyList()) }; _beatStatus.value = BeatStatus.NotFound }
+            else { _project.update { it.copy(beats = info.beatsMs) }; _beatStatus.value = BeatStatus.Found(info.bpm) }
+        }
+    }
 
     fun setMusic(uri: Uri) {
         runCatching {
@@ -67,15 +91,16 @@ class SlideshowViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             val d = withContext(Dispatchers.IO) { audioDurationMs(uri) }
-            _project.update { it.copy(music = MusicTrack(uri, displayName(uri), d)) }
+            _project.update { it.copy(music = MusicTrack(uri, displayName(uri), d), beats = emptyList()) }
+            reanalyseIfNeeded()
         }
     }
 
-    fun clearMusic() = _project.update { it.copy(music = null) }
+    fun clearMusic() { _project.update { it.copy(music = null, beatSync = false, beats = emptyList()) }; _beatStatus.value = BeatStatus.Idle }
     fun setMusicVolume(v: Float) = _project.update { p -> p.copy(music = p.music?.copy(volume = v)) }
     fun setMusicLoop(l: Boolean) = _project.update { p -> p.copy(music = p.music?.copy(loop = l)) }
 
-    fun export() = exporter.start(_project.value) { _export.value = it }
+    fun export() = exporter.start(_project.value.forExport(Pro.isPro)) { _export.value = it }
     fun cancelExport() { exporter.cancel(); _export.value = ExportState.Idle }
     fun dismissExport() { _export.value = ExportState.Idle }
 

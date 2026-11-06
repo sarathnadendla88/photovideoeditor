@@ -20,7 +20,7 @@ fun fitAnchor(bias: Float, itemPx: Int, framePx: Int): Float = bias * (1f - item
 /** A burned-in caption shown between [startMs] and [endMs] on the exported timeline. */
 data class Caption(val text: String, val startMs: Long, val endMs: Long, val x: Float = 0f, val y: Float = -0.7f)
 
-enum class CaptionStyle(val label: String) { CLASSIC("Classic"), BOXED("Boxed"), HIGHLIGHT("Highlight"), NEON("Neon"), BOLD("Bold") }
+enum class CaptionStyle(val label: String, val pro: Boolean = false) { CLASSIC("Classic"), BOXED("Boxed"), HIGHLIGHT("Highlight"), NEON("Neon"), BOLD("Bold"), OUTLINE("Outline", true), PINK_GLOW("Pink glow", true), SUNSET("Sunset", true) }
 enum class CaptionAnim(val label: String) { NONE("None"), FADE("Fade"), POP("Pop"), SLIDE("Slide up") }
 
 /**
@@ -39,7 +39,19 @@ enum class SpeedRamp(val label: String, val segments: List<Pair<Float, Float>>) 
     MONTAGE("Montage", listOf(0.25f to 2f, 0.5f to 0.5f, 0.75f to 2f, 1f to 0.5f)),
 }
 
-enum class VoiceFx(val label: String, val pitch: Float) { NORMAL("Normal", 1f), HIGH("High", 1.35f), DEEP("Deep", 0.75f), CHIPMUNK("Chipmunk", 1.7f), GIANT("Giant", 0.6f) }
+enum class VoiceFx(val label: String, val pitch: Float, val pro: Boolean = false) {
+    NORMAL("Normal", 1f), HIGH("High", 1.35f), DEEP("Deep", 0.75f), CHIPMUNK("Chipmunk", 1.7f), GIANT("Giant", 0.6f),
+    ROBOT("Robot", 1f, true), ECHO("Echo", 1f, true), ALIEN("Alien", 1.45f, true),
+}
+
+/** The audio processors that give [fx] its sound (empty for Normal). */
+fun voiceProcessors(fx: VoiceFx): List<androidx.media3.common.audio.AudioProcessor> = when (fx) {
+    VoiceFx.NORMAL -> emptyList()
+    VoiceFx.ROBOT -> listOf(RobotAudioProcessor())
+    VoiceFx.ECHO -> listOf(EchoAudioProcessor())
+    VoiceFx.ALIEN -> listOf(androidx.media3.common.audio.SonicAudioProcessor().apply { setPitch(fx.pitch) }, RobotAudioProcessor(freqHz = 28f, depth = 0.45f))   // higher voice with a wobble
+    else -> listOf(androidx.media3.common.audio.SonicAudioProcessor().apply { setPitch(fx.pitch) })
+}
 
 data class LookPreset(val name: String, val filter: PhotoFilter, val brightness: Float = 0f, val contrast: Float = 0f, val saturation: Float = 0f)
 val LookPresets = listOf(
@@ -50,6 +62,13 @@ val LookPresets = listOf(
     LookPreset("Retro", PhotoFilter.RETRO, 0f, 0.05f, 0f),
     LookPreset("Noir", PhotoFilter.NOIR, 0f, 0.1f, 0f),
     LookPreset("Fresh", PhotoFilter.MINT, 0.05f, 0.05f, 0.15f),
+    // Pro looks
+    LookPreset("Teal & orange", PhotoFilter.CINEMA, 0f, 0.15f, 0.1f),
+    LookPreset("Golden hour", PhotoFilter.GOLDEN, 0.03f, 0.08f, 0.1f),
+    LookPreset("Pastel dream", PhotoFilter.PASTEL, 0.04f, -0.05f, -0.05f),
+    LookPreset("Cyberpunk", PhotoFilter.CYBER, -0.02f, 0.2f, 0.15f),
+    LookPreset("Film stock", PhotoFilter.FILM, 0f, 0.1f, -0.05f),
+    LookPreset("Hi-con B&W", PhotoFilter.HICON, 0f, 0.12f, 0f),
 )
 
 enum class Platform(val label: String, val canvas: CanvasPreset, val quality: ExportQuality) {
@@ -111,9 +130,11 @@ class CaptionOverlay(
         val size = canvasWidth / 13f * sizeScale
         val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = size; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); textAlign = Paint.Align.LEFT
-            color = when (capStyle) { CaptionStyle.HIGHLIGHT -> Color.BLACK; CaptionStyle.NEON -> 0xFF2DD4BF.toInt(); CaptionStyle.BOLD -> 0xFFFFD43B.toInt(); else -> Color.WHITE }
+            color = when (capStyle) { CaptionStyle.HIGHLIGHT -> Color.BLACK; CaptionStyle.NEON -> 0xFF2DD4BF.toInt(); CaptionStyle.BOLD -> 0xFFFFD43B.toInt(); CaptionStyle.PINK_GLOW -> 0xFFFF7AB8.toInt(); CaptionStyle.SUNSET -> 0xFFFFB84D.toInt(); else -> Color.WHITE }
             if (capStyle == CaptionStyle.CLASSIC || capStyle == CaptionStyle.BOLD) setShadowLayer(size / 7, 0f, 0f, Color.BLACK)
             if (capStyle == CaptionStyle.NEON) setShadowLayer(size / 3, 0f, 0f, 0xFF2DD4BF.toInt())
+            if (capStyle == CaptionStyle.PINK_GLOW) setShadowLayer(size / 2.5f, 0f, 0f, 0xFFFF2E93.toInt())
+            if (capStyle == CaptionStyle.SUNSET) setShadowLayer(size / 7, 0f, 0f, 0xFF7A1F5C.toInt())
         }
         // Wrap to the text itself (up to maxW) so boxes and highlights hug the words like the preview does.
         val textW = Math.ceil(Layout.getDesiredWidth(text, paint).toDouble()).toInt().coerceIn(1, maxW)
@@ -126,7 +147,14 @@ class CaptionOverlay(
             CaptionStyle.HIGHLIGHT -> cv.drawRoundRect(RectF(0f, 0f, bmp.width.toFloat(), bmp.height.toFloat()), size / 3, size / 3, Paint().apply { color = 0xFFFFD43B.toInt() })
             else -> Unit
         }
-        cv.translate(pad.toFloat(), pad.toFloat()); layout.draw(cv)
+        cv.translate(pad.toFloat(), pad.toFloat())
+        if (capStyle == CaptionStyle.OUTLINE) {
+            // a thick black outline drawn first, then the white text on top: readable on any picture
+            val stroke = TextPaint(paint).apply { style = Paint.Style.STROKE; strokeWidth = size / 5f; color = Color.BLACK; strokeJoin = Paint.Join.ROUND; clearShadowLayer() }
+            StaticLayout.Builder.obtain(text, 0, text.length, stroke, textW).setAlignment(Layout.Alignment.ALIGN_CENTER).build().draw(cv)
+        }
+        if (capStyle == CaptionStyle.SUNSET) paint.shader = android.graphics.LinearGradient(0f, 0f, 0f, layout.height.toFloat(), intArrayOf(0xFFFFE066.toInt(), 0xFFFF6B8A.toInt()), null, android.graphics.Shader.TileMode.CLAMP)
+        layout.draw(cv)
         return bmp
     }
     override fun getTextureSize(presentationTimeUs: Long): Size = getBitmap(presentationTimeUs).let { Size(it.width, it.height) }

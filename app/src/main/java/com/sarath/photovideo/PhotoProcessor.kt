@@ -97,6 +97,34 @@ object PhotoProcessor {
         return m
     }
 
+    /** Puts [img] inside a frame of the given style; [b] is the border thickness in pixels and [bg] the border colour. */
+    fun frame(img: Bitmap, style: FrameStyle, b: Int, bg: Int): Bitmap {
+        val w = img.width; val h = img.height
+        return when (style) {
+            FrameStyle.PLAIN -> Bitmap.createBitmap(w + 2 * b, h + 2 * b, Bitmap.Config.ARGB_8888).also { Canvas(it).apply { drawColor(bg); drawBitmap(img, b.toFloat(), b.toFloat(), null) } }
+            FrameStyle.POLAROID -> Bitmap.createBitmap(w + 2 * b, h + 5 * b, Bitmap.Config.ARGB_8888).also { Canvas(it).apply { drawColor(bg); drawBitmap(img, b.toFloat(), b.toFloat(), null) } }   // thick bottom, like an instant photo
+            FrameStyle.FILM -> {
+                val bar = (b * 1.6f).toInt().coerceAtLeast(6)
+                Bitmap.createBitmap(w, h + 2 * bar, Bitmap.Config.ARGB_8888).also { o ->
+                    val c = Canvas(o); c.drawColor(Color.rgb(18, 18, 18)); c.drawBitmap(img, 0f, bar.toFloat(), null)
+                    val hole = bar * 0.46f; val gap = bar * 1.05f; val hp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(235, 235, 235) }
+                    var x = gap / 2f
+                    while (x + hole < w) { listOf((bar - hole) / 2f, bar + h + (bar - hole) / 2f).forEach { y -> c.drawRoundRect(RectF(x, y, x + hole, y + hole), hole / 4, hole / 4, hp) }; x += hole + gap - hole / 2f }
+                }
+            }
+            FrameStyle.ROUNDED -> Bitmap.createBitmap(w + 2 * b, h + 2 * b, Bitmap.Config.ARGB_8888).also { o ->
+                val c = Canvas(o); c.drawColor(bg)
+                val r = minOf(w, h) * 0.07f; val rect = RectF(b.toFloat(), b.toFloat(), (b + w).toFloat(), (b + h).toFloat())
+                c.save(); c.clipPath(Path().apply { addRoundRect(rect, r, r, Path.Direction.CW) }); c.drawBitmap(img, b.toFloat(), b.toFloat(), null); c.restore()
+            }
+            FrameStyle.SHADOW -> Bitmap.createBitmap(w + 4 * b, h + 4 * b, Bitmap.Config.ARGB_8888).also { o ->
+                val c = Canvas(o); c.drawColor(bg)
+                val sp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; setShadowLayer(b * 0.9f, 0f, b * 0.35f, 0xAA000000.toInt()) }
+                c.drawRect(2f * b, 2f * b, (2 * b + w).toFloat(), (2 * b + h).toFloat(), sp); c.drawBitmap(img, 2f * b, 2f * b, null)
+            }
+        }
+    }
+
     fun filterMatrix(f: PhotoFilter): ColorMatrix? = when (f) {
         PhotoFilter.NONE -> null
         PhotoFilter.MONO -> ColorMatrix().apply { setSaturation(0f) }
@@ -110,6 +138,15 @@ object PhotoProcessor {
         PhotoFilter.SUNSET -> ColorMatrix(floatArrayOf(1.2f, .1f, 0f, 0f, 15f, 0f, .95f, 0f, 0f, 0f, 0f, .1f, .8f, 0f, 10f, 0f, 0f, 0f, 1f, 0f))
         PhotoFilter.MINT -> ColorMatrix(floatArrayOf(.9f, 0f, 0f, 0f, 0f, 0f, 1.1f, .05f, 0f, 10f, 0f, .1f, 1.05f, 0f, 10f, 0f, 0f, 0f, 1f, 0f))
         PhotoFilter.RETRO -> ColorMatrix().apply { setSaturation(0.75f); postConcat(ColorMatrix(floatArrayOf(1.05f, .05f, 0f, 0f, 20f, 0f, 1f, 0f, 0f, 10f, 0f, 0f, .85f, 0f, 0f, 0f, 0f, 0f, 1f, 0f))) }
+        // Pro pack
+        PhotoFilter.CINEMA -> ColorMatrix(floatArrayOf(1.14f, 0f, -.06f, 0f, 4f, 0f, 1f, .04f, 0f, 0f, -.1f, .14f, 1.12f, 0f, 8f, 0f, 0f, 0f, 1f, 0f)).apply { postConcat(ColorMatrix().apply { setSaturation(1.12f) }) }   // teal shadows, warm highlights
+        PhotoFilter.GOLDEN -> ColorMatrix(floatArrayOf(1.18f, .06f, 0f, 0f, 16f, 0f, 1.04f, 0f, 0f, 8f, 0f, 0f, .76f, 0f, 0f, 0f, 0f, 0f, 1f, 0f))
+        PhotoFilter.MATTE -> ColorMatrix().apply { setSaturation(0.88f); postConcat(ColorMatrix(floatArrayOf(.88f, 0f, 0f, 0f, 26f, 0f, .88f, 0f, 0f, 26f, 0f, 0f, .88f, 0f, 28f, 0f, 0f, 0f, 1f, 0f))) }   // lifted blacks
+        PhotoFilter.CYBER -> ColorMatrix(floatArrayOf(1.1f, 0f, .18f, 0f, 0f, 0f, .82f, .12f, 0f, 0f, .12f, .22f, 1.3f, 0f, 12f, 0f, 0f, 0f, 1f, 0f))   // magenta and cyan push
+        PhotoFilter.PASTEL -> ColorMatrix().apply { setSaturation(0.68f); postConcat(ColorMatrix(floatArrayOf(.85f, 0f, 0f, 0f, 42f, 0f, .85f, 0f, 0f, 42f, 0f, 0f, .85f, 0f, 46f, 0f, 0f, 0f, 1f, 0f))) }
+        PhotoFilter.FILM -> ColorMatrix().apply { setSaturation(0.9f); postConcat(ColorMatrix(floatArrayOf(1.08f, 0f, 0f, 0f, -8f, 0f, 1.1f, 0f, 0f, -4f, 0f, 0f, 1.02f, 0f, 4f, 0f, 0f, 0f, 1f, 0f))) }
+        PhotoFilter.HICON -> ColorMatrix().apply { setSaturation(0f); postConcat(ColorMatrix(floatArrayOf(1.6f, 0f, 0f, 0f, -70f, 0f, 1.6f, 0f, 0f, -70f, 0f, 0f, 1.6f, 0f, -70f, 0f, 0f, 0f, 1f, 0f))) }
+        PhotoFilter.DUSK -> ColorMatrix(floatArrayOf(.95f, 0f, .1f, 0f, 0f, 0f, .88f, .1f, 0f, 0f, .06f, .06f, 1.22f, 0f, 14f, 0f, 0f, 0f, 1f, 0f))
     }
 
     private fun sharpen(bmp: Bitmap, amount: Float): Bitmap {
@@ -156,6 +193,7 @@ object PhotoProcessor {
             bmp = Bitmap.createBitmap(bmp, x, y, w, h)
         }
         if (e.sharpen > 0f) bmp = sharpen(bmp.copy(Bitmap.Config.ARGB_8888, false), e.sharpen)
+        if (e.effect != PhotoEffect.NONE) bmp = PhotoEffects.apply(bmp.copy(Bitmap.Config.ARGB_8888, false), e.effect, e.effectStrength)
         val out = Bitmap.createBitmap(bmp.width, bmp.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         canvas.drawBitmap(bmp, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG).apply { colorFilter = ColorMatrixColorFilter(colorMatrix(e)) })
@@ -191,11 +229,9 @@ object PhotoProcessor {
         }
         e.texts.filter { it.text.isNotBlank() }.forEach { t -> drawText(canvas, t, W, H) }
         var result = out
-        if (e.border > 0f) {
-            val b = (maxOf(W, H) * e.border).toInt()
-            result = Bitmap.createBitmap(out.width + 2 * b, out.height + 2 * b, Bitmap.Config.ARGB_8888).also {
-                Canvas(it).apply { drawColor(e.borderColor.argb); drawBitmap(out, b.toFloat(), b.toFloat(), null) }
-            }
+        if (e.border > 0f || e.frameStyle != FrameStyle.PLAIN) {
+            val b = (maxOf(W, H) * (if (e.border > 0f) e.border else 0.04f)).toInt().coerceAtLeast(2)
+            result = frame(out, e.frameStyle, b, e.borderColor.argb)
             out.recycle()
         }
         if (bmp !== src) bmp.recycle()

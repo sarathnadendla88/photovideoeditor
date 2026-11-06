@@ -5,16 +5,20 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
-    <!-- Needed only by Google Mobile Ads (ads + consent). Your photos, videos and audio are never sent anywhere. -->
+    <!-- Needed only by Google Mobile Ads (ads + consent) and the optional Pro purchase (Razorpay). Your photos, videos and audio are never sent anywhere. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
     <!-- Only to let the Ringtone maker set your ringtone/notification/alarm when you tap the button; Android asks you first. -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
-    <queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>
+    <queries>
+        <package android:name="com.whatsapp" /><package android:name="com.instagram.android" /><package android:name="com.google.android.youtube" />
+        <package android:name="com.facebook.katana" /><package android:name="org.telegram.messenger" /><package android:name="com.snapchat.android" /><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>
     <!-- No broad media permissions: media is selected through the system Photo Picker / SAF. -->
     <application
-        android:allowBackup="false"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -31,6 +35,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
             <!-- "Share → ReelMint" from Gallery, Files, Drive, etc. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

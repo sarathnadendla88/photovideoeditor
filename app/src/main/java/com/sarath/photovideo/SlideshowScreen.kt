@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.sarath.photovideo.SlideshowViewModel.BeatStatus
 import kotlinx.coroutines.launch
 
 private val tabs = listOf(
@@ -91,7 +92,8 @@ fun SlideshowScreen(vm: SlideshowViewModel, onTakePhoto: () -> Unit = {}, onBack
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             itemsIndexed(project.photos, key = { _, u -> u.toString() }) { i, uri -> PhotoThumb(uri, i, project.photos.size, i == selected, { selected = i }, { vm.movePhoto(i, i - 1); selected = i - 1 }, { vm.movePhoto(i, i + 1); selected = i + 1 }, { vm.removePhoto(i) }) }
                         }
-                        LabeledSlider("Seconds per photo", project.secondsPerPhoto, 1f..8f, "%.1fs".format(project.secondsPerPhoto), vm::setSeconds)
+                        if (project.beatSync && project.beats.size >= 4) Text("Photo length follows the music beat (change it on the Music tab)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        else LabeledSlider("Seconds per photo", project.secondsPerPhoto, 1f..8f, "%.1fs".format(project.secondsPerPhoto), vm::setSeconds)
                         if (project.photos.isNotEmpty()) {
                             val cur = project.photos[selected.coerceIn(project.photos.indices)]
                             OutlinedTextField(project.slideCaptions[cur.toString()].orEmpty(), { vm.setSlideCaption(cur, it) }, label = { Text("Caption for photo ${selected.coerceIn(project.photos.indices) + 1}") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -103,17 +105,18 @@ fun SlideshowScreen(vm: SlideshowViewModel, onTakePhoto: () -> Unit = {}, onBack
                             itemsIndexed(SlideshowTemplates) { _, t -> TemplateCard(t) { vm.applyTemplate(t) } }
                         }
                         Text("Motion", style = MaterialTheme.typography.titleSmall)
-                        ChipRow(Motion.entries, project.motion, { it.label }, vm::setMotion)
+                        ProChipRow(Motion.entries, project.motion, { it.label }, { !Entitlements.motion(it, Pro.isPro) }, "Pro slideshow motions", vm::setMotion)
                         Text("Transition between photos", style = MaterialTheme.typography.titleSmall)
-                        ChipRow(Transition.entries, project.transition, { it.label }, vm::setTransition)
+                        ProChipRow(Transition.entries, project.transition, { it.label }, { !Entitlements.transition(it, Pro.isPro) }, "The Flash white transition", vm::setTransition)
                     }
                     2 -> {
                         OutlinedTextField(project.title, vm::setTitle, label = { Text("Opening title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(project.endText, vm::setEndText, label = { Text("Ending text") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(project.watermark, vm::setWatermark, label = { Text("Watermark / credit (bottom-right)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        LogoSetting(project.logoUri, project.logoCorner, vm::setLogo, vm::setLogoCorner)
                         HorizontalDivider()
                         Text("Stickers & pictures (on every photo)", style = MaterialTheme.typography.titleSmall)
-                        ChipRow(listOf("😀", "😍", "🔥", "🎉", "❤️", "⭐", "👑", "🎵"), "", { it }) { e -> vm.addSticker(VideoSticker(e)); stickerSel = OverlaySel(1, project.stickers.size) }
+                        StickerShelf { e -> vm.addSticker(VideoSticker(e)); stickerSel = OverlaySel(1, project.stickers.size) }
                         OutlinedButton({ stickerPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Icon(Icons.Default.AddPhotoAlternate, null); Text(" Add your own picture") }
                         project.stickers.forEachIndexed { i, st ->
                             val on = stickerSel == OverlaySel(1, i)
@@ -142,6 +145,20 @@ fun SlideshowScreen(vm: SlideshowViewModel, onTakePhoto: () -> Unit = {}, onBack
                             Text(m.displayName, style = MaterialTheme.typography.titleSmall)
                             LabeledSlider("Volume", m.volume, 0f..1f, "${(m.volume * 100).toInt()}%", vm::setMusicVolume)
                             if (m.durationMs > 2000) LabeledSlider("Start at", m.startMs.toFloat(), 0f..(m.durationMs - 1000).toFloat(), fmtMs(m.startMs)) { vm.setMusicStart(it.toLong()) }
+                            val beat by vm.beatStatus.collectAsStateWithLifecycle()
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Switch(project.beatSync, vm::setBeatSync); Spacer(Modifier.width(8.dp))
+                                Column { Text("Cut photos on the beat", style = MaterialTheme.typography.titleSmall); Text("Photo changes line up with the music", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                            if (project.beatSync) {
+                                ChipRow(listOf(1, 2, 4, 8), project.beatsPerPhoto, { if (it == 1) "Every beat" else "Every $it beats" }, vm::setBeatsPerPhoto)
+                                Text(when (val b = beat) {
+                                    BeatStatus.Working -> "Listening for the beat…"
+                                    is BeatStatus.Found -> "Found about ${b.bpm.toInt()} BPM · ${project.photos.size} photos = ${"%.1f".format(project.totalDurationMs / 1000f)} s"
+                                    BeatStatus.NotFound -> "Couldn't find a steady beat in this part of the song, so the normal photo length is used."
+                                    BeatStatus.Idle -> if (project.beats.size >= 4) "Beat found · ${project.photos.size} photos = ${"%.1f".format(project.totalDurationMs / 1000f)} s" else "Waiting for the music…"
+                                }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                            }
                             LabeledSlider("Fade in", m.fadeInMs / 1000f, 0f..5f, "%.1fs".format(m.fadeInMs / 1000f)) { vm.setFadeIn((it * 1000).toLong()) }
                             LabeledSlider("Fade out", m.fadeOutMs / 1000f, 0f..5f, "%.1fs".format(m.fadeOutMs / 1000f)) { vm.setFadeOut((it * 1000).toLong()) }
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -155,7 +172,8 @@ fun SlideshowScreen(vm: SlideshowViewModel, onTakePhoto: () -> Unit = {}, onBack
                         Text("Canvas", style = MaterialTheme.typography.titleSmall)
                         ChipRow(CanvasPreset.entries, project.canvas, { it.label }, vm::setCanvas)
                         Text("Quality", style = MaterialTheme.typography.titleSmall)
-                        ChipRow(ExportQuality.entries, project.quality, { "${it.label} · ${project.canvas.size(it).let { s -> minOf(s.first, s.second) }}p" }, vm::setQuality)
+                        ProChipRow(ExportQuality.entries, project.quality, { "${it.label} · ${project.canvas.size(it).let { s -> minOf(s.first, s.second) }}p" }, { !Entitlements.quality(it, Pro.isPro) }, "High (1080p) export", vm::setQuality)
+                        if (!Pro.isPro) ProTagNote()
                     }
                 }
             }

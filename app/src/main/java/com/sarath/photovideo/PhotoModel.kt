@@ -3,9 +3,12 @@ package com.sarath.photovideo
 import android.graphics.*
 import androidx.compose.ui.graphics.Color as ComposeColor
 
-enum class PhotoFilter(val label: String) {
+enum class PhotoFilter(val label: String, val pro: Boolean = false) {
     NONE("Original"), MONO("Mono"), NOIR("Noir"), SEPIA("Sepia"), VIVID("Vivid"), COOL("Cool"), WARM("Warm"),
     FADE("Fade"), DRAMATIC("Dramatic"), SUNSET("Sunset"), MINT("Mint"), RETRO("Retro"),
+    // ReelMint Pro filter pack (also used for video)
+    CINEMA("Cinema", true), GOLDEN("Golden hour", true), MATTE("Matte", true), CYBER("Cyber", true),
+    PASTEL("Pastel", true), FILM("Film", true), HICON("Hi-con B&W", true), DUSK("Dusk", true),
 }
 enum class CropRatio(val label: String, val ratio: Float?) {
     FREE("Free", null), SQUARE("1:1", 1f), R45("4:5", 0.8f), R169("16:9", 16f / 9f), R916("9:16", 9f / 16f), R43("4:3", 4f / 3f)
@@ -34,9 +37,14 @@ data class CropRect(val l: Float = 0f, val t: Float = 0f, val r: Float = 1f, val
 data class Stroke(val points: List<Pair<Float, Float>>, val color: Palette, val width: Float)
 data class Sticker(val emoji: String, val x: Float = 0.5f, val y: Float = 0.5f, val size: Float = 0.2f, val rotation: Float = 0f)
 
-enum class TextFont(val label: String, val family: String) {
+enum class TextFont(val label: String, val family: String, val pro: Boolean = false) {
     SANS("Sans", "sans-serif"), SERIF("Serif", "serif"), MONO("Mono", "monospace"), SCRIPT("Script", "cursive"), NARROW("Narrow", "sans-serif-condensed"),
+    // ReelMint Pro fonts
+    LIGHT("Light", "sans-serif-light", true), THIN("Thin", "sans-serif-thin", true), HEAVY("Heavy", "sans-serif-black", true),
+    CASUAL("Casual", "casual", true), TYPEWRITER("Typewriter", "serif-monospace", true), SMALLCAPS("Small caps", "sans-serif-smallcaps", true), SLIM("Slim", "sans-serif-condensed-light", true),
 }
+/** How the photo border looks. Plain is free; the rest are ReelMint Pro. */
+enum class FrameStyle(val label: String, val pro: Boolean = false) { PLAIN("Plain"), POLAROID("Polaroid", true), FILM("Film strip", true), ROUNDED("Rounded", true), SHADOW("Shadow", true) }
 /** A text layer. x,y are the centre in 0..1 of the final image; size is a fraction of the image height. */
 data class TextLayer(
     val text: String = "Your text", val x: Float = 0.5f, val y: Float = 0.5f, val size: Float = 0.08f, val color: Palette = Palette.WHITE,
@@ -52,8 +60,9 @@ data class PhotoEdit(
     val vignette: Float = 0f, val sharpen: Float = 0f, val fade: Float = 0f, val filter: PhotoFilter = PhotoFilter.NONE,
     val texts: List<TextLayer> = emptyList(), val images: List<ImageLayer> = emptyList(),
     val stickers: List<Sticker> = emptyList(), val strokes: List<Stroke> = emptyList(),
-    val border: Float = 0f, val borderColor: Palette = Palette.WHITE,
+    val border: Float = 0f, val borderColor: Palette = Palette.WHITE, val frameStyle: FrameStyle = FrameStyle.PLAIN,
     val background: Background = Background.KEEP, val backgroundColor: Palette = Palette.WHITE,
+    val effect: PhotoEffect = PhotoEffect.NONE, val effectStrength: Float = 0.5f,
 )
 
 class UndoStack<T>(initial: T) {

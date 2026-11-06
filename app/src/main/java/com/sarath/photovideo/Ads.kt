@@ -45,11 +45,12 @@ object Ads {
     private var exportsSinceAd = 0
     var consentReady by mutableStateOf(false); private set
 
-    fun privacyOptionsRequired(context: Context) =
+    fun privacyOptionsRequired(context: Context) = !Pro.isPro &&
         UserMessagingPlatform.getConsentInformation(context).privacyOptionsRequirementStatus == ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED
 
     /** Gathers consent (shows Google's form if the user's region requires it) and only then starts the ads SDK. */
     fun start(activity: Activity) {
+        if (Pro.isPro) return
         val info = UserMessagingPlatform.getConsentInformation(activity)
         info.requestConsentInfoUpdate(activity, ConsentRequestParameters.Builder().build(), {
             UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { _ -> initIfAllowed(activity, info) }
@@ -81,6 +82,7 @@ object Ads {
      * ad every [EXPORTS_PER_AD] exports, and only if one is already loaded, so it never delays the user.
      */
     fun maybeShowAfterExport(activity: Activity) {
+        if (Pro.isPro) { interstitial = null; return }
         exportsSinceAd++
         val ad = interstitial
         if (exportsSinceAd < EXPORTS_PER_AD || ad == null) { preloadInterstitial(activity); return }
@@ -96,7 +98,7 @@ object Ads {
 /** Banner for the home screen only. Collapses to nothing until an ad has loaded, so there is no empty gap. */
 @Composable
 fun HomeBanner(modifier: Modifier = Modifier) {
-    if (!Ads.consentReady) return
+    if (Pro.isPro || !Ads.consentReady) return
     val ctx = LocalContext.current
     var loaded by remember { mutableStateOf(false) }
     val view = remember {

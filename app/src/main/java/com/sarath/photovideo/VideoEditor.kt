@@ -60,6 +60,8 @@ data class VideoClip(
     val width: Int = 0, val height: Int = 0,
     /** A still frame held for [durationMs] (freeze frame). [uri] is a JPEG in app storage. */
     val freeze: Boolean = false,
+    /** Clockwise quarter turns (0, 90, 180, 270) and a left-right mirror, applied before the clip is fitted to the canvas. */
+    val rotation: Int = 0, val flipH: Boolean = false,
 ) {
     val lengthMs get() = (trimEndMs - trimStartMs).coerceAtLeast(0)
     /** Length in the exported video after the speed change. */
@@ -67,7 +69,7 @@ data class VideoClip(
 }
 
 /** What the preview player depends on: it only reloads when one of these changes (not on speed, captions, etc.). */
-private data class PreviewKey(val uri: Uri, val start: Long, val end: Long, val freeze: Boolean, val durationMs: Long)
+private data class PreviewKey(val uri: Uri, val start: Long, val end: Long, val freeze: Boolean, val durationMs: Long, val rotation: Int, val flipH: Boolean)
 
 data class Voiceover(val uri: Uri, val durationMs: Long, val fx: VoiceFx = VoiceFx.NORMAL)
 
@@ -92,6 +94,10 @@ data class VideoProject(
     val watermark: String = "",
     val music: MusicTrack? = null,
     val voiceover: Voiceover? = null,
+    /** "Made with ReelMint" tag on the export; set at export time for free users. */
+    val brandTag: Boolean = false,
+    /** Pro: the creator's own logo (a picture copied into app storage) in one corner. */
+    val logoUri: String? = null, val logoCorner: LogoCorner = LogoCorner.BOTTOM_RIGHT,
 ) {
     val totalMs get() = clips.sumOf { it.outputMs }
     val canExport get() = clips.isNotEmpty() && clips.all { it.lengthMs >= MIN_CLIP_MS }
@@ -109,8 +115,11 @@ data class VideoProject(
         if (split === this) return this
         return split.copy(clips = split.clips.toMutableList().also { it.add(i + 1, frame) })
     }
+    fun rotate(i: Int) = copy(clips = clips.mapIndexed { idx, c -> if (idx == i) c.copy(rotation = (c.rotation + 90) % 360) else c })
+    fun flip(i: Int) = copy(clips = clips.mapIndexed { idx, c -> if (idx == i) c.copy(flipH = !c.flipH) else c })
     fun applyLook(l: LookPreset) = copy(filter = l.filter, brightness = l.brightness, contrast = l.contrast, saturation = l.saturation)
-    fun applyPlatform(pl: Platform) = copy(canvas = pl.canvas, quality = pl.quality)
+    /** [capForFree]: free users keep the preset's canvas but never get High (1080p) quality. */
+    fun applyPlatform(pl: Platform, capForFree: Boolean = false) = copy(canvas = pl.canvas, quality = if (capForFree) Entitlements.cap(pl.quality, false) else pl.quality)
     /** Splits clip [i] at [atMs] (absolute position in the source) into two adjacent clips. */
     fun split(i: Int, atMs: Long): VideoProject {
         val c = clips.getOrNull(i) ?: return this
@@ -143,6 +152,13 @@ fun videoColorEffects(p: VideoProject): List<Effect> = buildList {
     if (p.saturation != 0f) add(HslAdjustment.Builder().adjustSaturation(p.saturation * 100f).build())
 }
 
+/** Rotate/mirror effect for one clip, or null when it is untouched. Media3 turns counter-clockwise, we store clockwise. */
+fun transformEffect(c: VideoClip): Effect? {
+    if (c.rotation == 0 && !c.flipH) return null
+    return androidx.media3.effect.ScaleAndRotateTransformation.Builder()
+        .setRotationDegrees(-c.rotation.toFloat()).setScale(if (c.flipH) -1f else 1f, 1f).build()
+}
+
 fun buildVideoComposition(ctx: android.content.Context, p: VideoProject): Composition {
     val (cw, ch) = p.canvas.size(p.quality)
     var offsetMs = 0L
@@ -152,11 +168,12 @@ fun buildVideoComposition(ctx: android.content.Context, p: VideoProject): Compos
         val audioFx = buildList<androidx.media3.common.audio.AudioProcessor> {
             if (provider != null) add(SpeedChangingAudioProcessor(provider))
             if (p.originalVolume != 1f) add(SlideshowExporter.volumeProcessor(p.originalVolume))
-            if (p.originalVoice != VoiceFx.NORMAL) add(androidx.media3.common.audio.SonicAudioProcessor().apply { setPitch(p.originalVoice.pitch) })
+            addAll(voiceProcessors(p.originalVoice))
             if (!c.freeze) add(LimitAudioProcessor(c.outputMs))   // last: audio never outlasts this clip's picture
         }
         val videoFx = buildList<Effect> {
             if (provider != null) add(SpeedChangeEffect(provider))
+            transformEffect(c)?.let { add(it) }
             add(Presentation.createForWidthAndHeight(cw, ch, Presentation.LAYOUT_SCALE_TO_FIT))
             addAll(videoColorEffects(p))
             val overlays = mutableListOf<androidx.media3.effect.TextureOverlay>()
@@ -167,6 +184,8 @@ fun buildVideoComposition(ctx: android.content.Context, p: VideoProject): Compos
                 if (bmp != null) overlays += TimedBitmapOverlay(bmp, offsetMs, st, cw, ch)
             }
             if (p.watermark.isNotBlank()) overlays += watermarkOverlay(p.watermark.trim(), cw)
+            if (p.brandTag) overlays += brandTagOverlay(cw)
+            p.logoUri?.let { u -> logoOverlay(ctx, u, p.logoCorner, cw)?.let { overlays += it } }
             fadeFor(p.transition, idx, p.clips.size, cw, ch, c.outputMs)?.let { overlays += it }
             if (overlays.isNotEmpty()) add(OverlayEffect(overlays))
         }
@@ -186,7 +205,7 @@ fun buildVideoComposition(ctx: android.content.Context, p: VideoProject): Compos
         // Clip to the video length so a long recording can't extend the output.
         val end = minOf(v.durationMs, p.totalMs)
         val clip = MediaItem.ClippingConfiguration.Builder().setEndPositionMs(end).build()
-        val fx = if (v.fx == VoiceFx.NORMAL) emptyList() else listOf(androidx.media3.common.audio.SonicAudioProcessor().apply { setPitch(v.fx.pitch) })
+        val fx = voiceProcessors(v.fx)
         val a = EditedMediaItem.Builder(MediaItem.Builder().setUri(v.uri).setClippingConfiguration(clip).build()).setRemoveVideo(true).setEffects(Effects(fx, emptyList())).build()
         seqs += EditedMediaItemSequence.Builder(a).build()
     }
@@ -253,6 +272,9 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
         if (after === before) { file.delete(); _error.value = "Pick a point a little away from the clip's start or end." } else _project.value = after
     }
 
+    fun setLogo(uri: Uri?) { viewModelScope.launch { val copy = if (uri == null) null else withContext(Dispatchers.IO) { OverlayFiles.import(getApplication(), uri) }; _project.update { it.copy(logoUri = copy?.toString()) } } }
+    fun setLogoCorner(c: LogoCorner) = _project.update { it.copy(logoCorner = c) }
+
     suspend fun addPicture(uri: Uri): Boolean {
         val copy = withContext(Dispatchers.IO) { OverlayFiles.import(getApplication(), uri) } ?: return false
         _project.update { it.copy(stickers = it.stickers + VideoSticker(imageUri = copy.toString(), size = 0.3f, y = 0f)) }
@@ -310,7 +332,7 @@ class VideoViewModel(app: Application) : AndroidViewModel(app) {
         _recording.value = false
         recorder.stop()?.let { (uri, d) -> _project.update { it.copy(voiceover = Voiceover(uri, d)) } } ?: run { _error.value = "Recording was too short." }
     }
-    fun export() { val p = _project.value; if (p.canExport) exporter.start(buildVideoComposition(getApplication(), p)) { _export.value = it } }
+    fun export() { val p = _project.value.forExport(Pro.isPro); if (p.canExport) exporter.start(buildVideoComposition(getApplication(), p)) { _export.value = it } }
     fun cancelExport() { exporter.cancel(); _export.value = ExportState.Idle }
     fun dismissExport() { _export.value = ExportState.Idle }
     fun clearError() { _error.value = null }
@@ -321,7 +343,7 @@ private val tabs = listOf(
     ToolTab("Clips", Icons.Default.ContentCut), ToolTab("Look", Icons.Default.Palette), ToolTab("Captions", Icons.Default.ClosedCaption),
     ToolTab("Audio", Icons.Default.GraphicEq), ToolTab("Output", Icons.Default.AspectRatio),
 )
-private val speeds = listOf(0.25f, 0.5f, 1f, 1.5f, 2f, 3f)
+private val speeds = listOf(0.1f, 0.25f, 0.5f, 1f, 1.5f, 2f, 3f, 5f, 8f)
 
 @Composable
 fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: () -> Unit) {
@@ -398,9 +420,10 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
         val v = p.voiceover
         if (v == null) { voicePlayer.stop(); voicePlayer.clearMediaItems() } else { voicePlayer.setMediaItem(MediaItem.fromUri(v.uri)); voicePlayer.prepare(); syncLayers() }
     }
-    LaunchedEffect(p.clips.map { PreviewKey(it.uri, it.trimStartMs, it.trimEndMs, it.freeze, it.durationMs) }, p.filter, p.brightness, p.contrast, p.saturation) {
+    LaunchedEffect(p.clips.map { PreviewKey(it.uri, it.trimStartMs, it.trimEndMs, it.freeze, it.durationMs, it.rotation, it.flipH) }, p.filter, p.brightness, p.contrast, p.saturation) {
         delay(300)
-        player.setVideoEffects(videoColorEffects(p))
+        val uniform = p.clips.map { it.rotation to it.flipH }.distinct().singleOrNull()
+        player.setVideoEffects(buildList { if (uniform != null) transformEffect(p.clips[0])?.let { add(it) }; addAll(videoColorEffects(p)) })
         player.setMediaItems(p.clips.map { c ->
             if (c.freeze) MediaItem.Builder().setUri(c.uri).setImageDurationMs(c.durationMs).build()
             else MediaItem.Builder().setUri(c.uri).setClippingConfiguration(
@@ -447,7 +470,7 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                             Text("${c.name} · keeping ${fmtMs(c.lengthMs)} of ${fmtMs(c.durationMs)}", style = MaterialTheme.typography.labelMedium)
                             RangeSlider(c.trimStartMs.toFloat()..c.trimEndMs.toFloat(), { r -> vm.update { it.trim(i, r.start.toLong(), r.endInclusive.toLong()) } }, valueRange = 0f..c.durationMs.toFloat())
                             Text("Speed", style = MaterialTheme.typography.labelMedium)
-                            ChipRow(speeds, c.speed, { if (it == 1f) "1×" else "${it}×" }) { s -> vm.update { it.speed(i, s) } }
+                            ProChipRow(speeds, c.speed, { if (it == 1f) "1×" else "${it}×" }, { !Entitlements.speed(it, Pro.isPro) }, "Slow-mo 0.1× and timelapse 5× / 8×") { s -> vm.update { it.speed(i, s) } }
                             Text("Speed ramp (slow-mo / fast moments)", style = MaterialTheme.typography.labelMedium)
                             ChipRow(SpeedRamp.entries, c.ramp, { it.label }) { r -> vm.update { it.ramp(i, r) } }
                             var splitAt by remember(c) { mutableFloatStateOf((c.trimStartMs + c.trimEndMs) / 2f) }
@@ -459,13 +482,18 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                                 IconButton({ vm.update { it.move(i, i + 1) }; sel = i + 1 }, enabled = i < p.clips.lastIndex) { Icon(Icons.Default.ArrowForward, "Move later") }
                                 IconButton({ vm.update { it.remove(i) } }) { Icon(Icons.Default.Delete, "Remove clip") }
                             }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedButton({ vm.update { it.rotate(i) } }) { Icon(Icons.Default.RotateRight, null); Text(" Rotate${if (c.rotation != 0) " (${c.rotation}°)" else ""}") }
+                                FilterChip(c.flipH, { vm.update { it.flip(i) } }, { Text("Mirror") }, leadingIcon = { Icon(Icons.Default.Flip, null, Modifier.size(18.dp)) })
+                                if (p.clips.size > 1 && p.clips.map { it.rotation to it.flipH }.distinct().size > 1) Text("Shown on export", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                     1 -> {
                         Text("One-tap looks", style = MaterialTheme.typography.labelMedium)
-                        ChipRow(LookPresets, LookPresets.firstOrNull { it.filter == p.filter && it.brightness == p.brightness && it.contrast == p.contrast && it.saturation == p.saturation }, { it.name }) { l -> vm.update { it.applyLook(l) } }
+                        ProChipRow(LookPresets, LookPresets.firstOrNull { it.filter == p.filter && it.brightness == p.brightness && it.contrast == p.contrast && it.saturation == p.saturation }, { it.name }, { !Entitlements.lookPreset(it, Pro.isPro) }, "Pro video looks") { l -> vm.update { it.applyLook(l) } }
                         Text("Filter", style = MaterialTheme.typography.labelMedium)
-                        ChipRow(PhotoFilter.entries, p.filter, { it.label }) { f -> vm.update { it.copy(filter = f) } }
+                        ProChipRow(PhotoFilter.entries, p.filter, { it.label }, { !Entitlements.filter(it, Pro.isPro) }, "Pro filters") { f -> vm.update { it.copy(filter = f) } }
                         LabeledSlider("Brightness", p.brightness, -0.5f..0.5f) { v -> vm.update { it.copy(brightness = v) } }
                         LabeledSlider("Contrast", p.contrast, -0.5f..0.5f) { v -> vm.update { it.copy(contrast = v) } }
                         LabeledSlider("Saturation", p.saturation, -1f..1f) { v -> vm.update { it.copy(saturation = v) } }
@@ -499,14 +527,14 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                         }
                         if (p.captions.isNotEmpty()) {
                             Text("Style", style = MaterialTheme.typography.labelMedium)
-                            ChipRow(CaptionStyle.entries, p.captionStyle, { it.label }) { v -> vm.update { it.copy(captionStyle = v) } }
+                            ProChipRow(CaptionStyle.entries, p.captionStyle, { it.label }, { !Entitlements.captionStyle(it, Pro.isPro) }, "Pro caption styles") { v -> vm.update { it.copy(captionStyle = v) } }
                             Text("Animation", style = MaterialTheme.typography.labelMedium)
                             ChipRow(CaptionAnim.entries, p.captionAnim, { it.label }) { v -> vm.update { it.copy(captionAnim = v) } }
                             LabeledSlider("Text size", p.captionSize, 0.6f..1.8f) { v -> vm.update { it.copy(captionSize = v) } }
                         }
                         HorizontalDivider()
                         Text("Stickers & pictures", style = MaterialTheme.typography.titleSmall)
-                        ChipRow(listOf("😀", "😍", "🔥", "🎉", "❤️", "⭐", "👑", "🎵"), "", { it }) { e -> vm.update { it.copy(stickers = it.stickers + VideoSticker(e)) }; overlaySel = OverlaySel(1, p.stickers.size) }
+                        StickerShelf { e -> vm.update { it.copy(stickers = it.stickers + VideoSticker(e)) }; overlaySel = OverlaySel(1, p.stickers.size) }
                         p.stickers.forEachIndexed { i, st ->
                             val selected = overlaySel == OverlaySel(1, i)
                             ElevatedCard({ overlaySel = OverlaySel(1, i) }, Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
@@ -534,7 +562,7 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                         if (!p.muteOriginal) {
                             LabeledSlider("Original volume", p.originalVolume, 0f..1f, "${(p.originalVolume * 100).toInt()}%") { v -> vm.update { it.copy(originalVolume = v) } }
                             Text("Voice changer for the original sound", style = MaterialTheme.typography.labelMedium)
-                            ChipRow(VoiceFx.entries, p.originalVoice, { it.label }) { f -> vm.update { it.copy(originalVoice = f) } }
+                            ProChipRow(VoiceFx.entries, p.originalVoice, { it.label }, { !Entitlements.voiceFx(it, Pro.isPro) }, "Pro voice effects") { f -> vm.update { it.copy(originalVoice = f) } }
                         }
                         HorizontalDivider()
                         FilledTonalButton({ audioPicker.launch(arrayOf("audio/*")) }, shape = RoundedCornerShape(14.dp)) { Icon(Icons.Default.LibraryMusic, null); Spacer(Modifier.width(8.dp)); Text(if (p.music == null) "Add music" else "Change music") }
@@ -562,7 +590,7 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                                 TextButton({ vm.update { it.copy(voiceover = null) } }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Remove", maxLines = 1, softWrap = false) }
                             }
                             Text("Voice effect", style = MaterialTheme.typography.labelMedium)
-                            ChipRow(VoiceFx.entries, v.fx, { it.label }) { f -> vm.update { it.copy(voiceover = it.voiceover?.copy(fx = f)) } }
+                            ProChipRow(VoiceFx.entries, v.fx, { it.label }, { !Entitlements.voiceFx(it, Pro.isPro) }, "Pro voice effects") { f -> vm.update { it.copy(voiceover = it.voiceover?.copy(fx = f)) } }
                         }
                         Text("The microphone is only used while recording. Audio stays on this device.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         OutlinedTextField(speech, { speech = it }, label = { Text("Or type text to turn into a voiceover") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
@@ -573,15 +601,18 @@ fun VideoEditorScreen(vm: VideoViewModel, onTakeVideo: () -> Unit = {}, onBack: 
                     }
                     4 -> {
                         Text("Export for", style = MaterialTheme.typography.titleSmall)
-                        ChipRow(Platform.entries, Platform.entries.firstOrNull { it.canvas == p.canvas && it.quality == p.quality }, { it.label }) { pl -> vm.update { it.applyPlatform(pl) } }
+                        ChipRow(Platform.entries, Platform.entries.firstOrNull { it.canvas == p.canvas && it.quality == p.quality }, { it.label }) { pl -> vm.update { it.applyPlatform(pl, capForFree = !Pro.isPro) } }
+                        if (!Pro.isPro) Text("Presets use Standard quality. High (1080p) export is part of Pro.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Sets the canvas and quality that suit each platform. Apps may re-compress uploads.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Transition between clips", style = MaterialTheme.typography.titleSmall)
-                        ChipRow(Transition.entries, p.transition, { it.label }) { t -> vm.update { it.copy(transition = t) } }
+                        ProChipRow(Transition.entries, p.transition, { it.label }, { !Entitlements.transition(it, Pro.isPro) }, "The Flash white transition") { t -> vm.update { it.copy(transition = t) } }
                         OutlinedTextField(p.watermark, { w -> vm.update { it.copy(watermark = w.take(24)) } }, label = { Text("Watermark / credit (bottom-right)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        LogoSetting(p.logoUri, p.logoCorner, vm::setLogo, vm::setLogoCorner)
                         Text("Canvas", style = MaterialTheme.typography.titleSmall)
                         ChipRow(CanvasPreset.entries, p.canvas, { it.label }) { c -> vm.update { it.copy(canvas = c) } }
                         Text("Quality", style = MaterialTheme.typography.titleSmall)
-                        ChipRow(ExportQuality.entries, p.quality, { "${it.label} · ${p.canvas.size(it).let { s -> minOf(s.first, s.second) }}p" }) { q -> vm.update { it.copy(quality = q) } }
+                        ProChipRow(ExportQuality.entries, p.quality, { "${it.label} · ${p.canvas.size(it).let { s -> minOf(s.first, s.second) }}p" }, { !Entitlements.quality(it, Pro.isPro) }, "High (1080p) export") { q -> vm.update { it.copy(quality = q) } }
+                        if (!Pro.isPro) ProTagNote()
                     }
                 }
             }

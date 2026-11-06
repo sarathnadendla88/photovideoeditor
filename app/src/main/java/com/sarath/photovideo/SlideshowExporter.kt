@@ -122,25 +122,28 @@ class SlideshowExporter(private val context: Context) {
     private fun buildComposition(p: SlideshowProject): Composition {
         val (cw, ch) = p.canvas.size(p.quality)
         val fill = Presentation.createForWidthAndHeight(cw, ch, Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP)
-        val perUs = p.perPhotoMs * 1000f
+        val durs = p.photoDurationsMs()
         val last = p.photos.lastIndex
         val photoItems = p.photos.mapIndexed { i, uri ->
+            val dur = durs[i]
             val video = mutableListOf<Effect>(fill)
-            motionEffect(p.motion, i, perUs)?.let { video += it }
+            motionEffect(p.motion, i, dur * 1000f)?.let { video += it }
             overlayFor(if (i == 0) p.title else "", if (i == last) p.endText else "", cw)?.let { video += it }
             val extra = mutableListOf<androidx.media3.effect.TextureOverlay>()
             if (p.watermark.isNotBlank()) extra += watermarkOverlay(p.watermark.trim(), cw)
+            if (p.brandTag) extra += brandTagOverlay(cw)
+            p.logoUri?.let { u -> logoOverlay(context, u, p.logoCorner, cw)?.let { extra += it } }
             p.slideCaptions[uri.toString()]?.takeIf { it.isNotBlank() }?.let { extra += staticText(it, -0.4f, cw) }
             p.stickers.forEach { st ->
                 val px = (cw * st.size).toInt().coerceAtLeast(32)
                 val bmp = if (st.imageUri != null) PhotoProcessor.decodeToWidth(context, android.net.Uri.parse(st.imageUri), px) else emojiBitmap(st.emoji, px)
                 if (bmp != null) extra += TimedBitmapOverlay(bmp, 0L, st, cw, ch)
             }
-            fadeFor(p.transition, i, p.photos.size, cw, ch, p.perPhotoMs)?.let { extra += it }
+            fadeFor(p.transition, i, p.photos.size, cw, ch, dur)?.let { extra += it }
             if (extra.isNotEmpty()) video += OverlayEffect(extra)
-            EditedMediaItem.Builder(MediaItem.Builder().setUri(uri).setImageDurationMs(p.perPhotoMs).build())
+            EditedMediaItem.Builder(MediaItem.Builder().setUri(uri).setImageDurationMs(dur).build())
                 .setFrameRate(30)
-                .setDurationUs(p.perPhotoMs * 1000)
+                .setDurationUs(dur * 1000)
                 .setEffects(Effects(emptyList(), video))
                 .build()
         }
@@ -165,6 +168,29 @@ class SlideshowExporter(private val context: Context) {
         Motion.POP -> MatrixTransformation { t ->
             val f = (t / 400_000f).coerceIn(0f, 1f); val e = 1f - (1f - f) * (1f - f)
             val s = 0.85f + 0.15f * e
+            Matrix().apply { postScale(s, s) }
+        }
+        // ---- Pro motions (scale and translate only, so non-square frames are never sheared)
+        Motion.ZOOM_OUT -> MatrixTransformation { t ->
+            val f = (t / perUs).coerceIn(0f, 1f)
+            val s = 1.2f - 0.2f * f
+            Matrix().apply { postScale(s, s) }
+        }
+        Motion.PAN -> MatrixTransformation { t ->
+            val f = (t / perUs).coerceIn(0f, 1f)
+            val dir = if (index % 2 == 0) 1f else -1f
+            // 1.16x zoom hides the edges while the picture drifts sideways by up to 0.16 of the frame width
+            Matrix().apply { postScale(1.16f, 1.16f); postTranslate(dir * 0.16f * (1f - 2f * f), 0f) }
+        }
+        Motion.DROP -> MatrixTransformation { t ->
+            val f = (t / 650_000f).coerceIn(0f, 1f)
+            // falls in from above (ease-out) and settles with a small damped wobble; y is up in normalised coordinates
+            val base = 1.6f * (1f - f) * (1f - f)
+            val wobble = 0.05f * (1f - f) * kotlin.math.sin(f * 3f * Math.PI.toFloat())
+            Matrix().apply { postTranslate(0f, base + wobble) }
+        }
+        Motion.PULSE -> MatrixTransformation { t ->
+            val s = 1f + 0.05f * kotlin.math.sin(t / 1_000_000f * 2f * Math.PI.toFloat() / 0.8f)
             Matrix().apply { postScale(s, s) }
         }
     }

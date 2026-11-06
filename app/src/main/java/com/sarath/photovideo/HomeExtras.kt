@@ -8,6 +8,8 @@ import android.provider.MediaStore
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -22,6 +24,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -61,7 +65,7 @@ fun RecentCreations() {
     LaunchedEffect(Unit) { items = withContext(Dispatchers.IO) { loadCreations(ctx) } }
     if (items.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Your creations", style = MaterialTheme.typography.titleMedium)
+        SectionTitle("Your creations")
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(items, key = { it.uri.toString() }) { c ->
                 Box(Modifier.size(110.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).clickable { selected = c }) {
@@ -101,16 +105,43 @@ fun SettingsDialog(onDismiss: () -> Unit, onReplayIntro: () -> Unit) {
     var bytes by remember { mutableLongStateOf(tempFiles(ctx).sumOf { it.length() }) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Settings & privacy") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {   // scrolls: the dialog is taller than a small screen
+                val gate = LocalProGate.current
+                Text("ReelMint Pro", style = MaterialTheme.typography.titleSmall)
+                if (Pro.isPro) {
+                    Text("Active, for life. Thank you! Ads are off and every Pro tool is unlocked.", style = MaterialTheme.typography.bodyMedium)
+                    if (Payments.config.testMode) OutlinedButton({ if (Pro.reset()) ctx.findActivity()?.let(Ads::start) }) { Text("Reset Pro (test mode only)") }
+                } else {
+                    Text("No ads, no \"Made with ReelMint\" tag, High (1080p) export, longer GIFs and more. ${Payments.config.displayPrice}, once, for life.", style = MaterialTheme.typography.bodyMedium)
+                    if (Payments.config.enabled) Button({ onDismiss(); gate("") }) { Icon(Icons.Default.WorkspacePremium, null); Text(" See Pro") }
+                }
+                HorizontalDivider()
                 Text("Privacy", style = MaterialTheme.typography.titleSmall)
                 Text("Your photos, videos and audio never leave this device and are never sent to advertisers. There is no account and no analytics. The camera and microphone are used only while you record.", style = MaterialTheme.typography.bodyMedium)
-                Text("Ads: the home screen shows a banner and an occasional full-screen ad appears after you finish saving an export. Ads are served by Google AdMob, which uses an advertising ID and may collect device and usage data, subject to your consent choice. Ads never appear while you edit.", style = MaterialTheme.typography.bodyMedium)
+                Text("Ads: the home screen shows a banner and an occasional full-screen ad appears after you finish saving an export. Ads are served by Google AdMob, which uses an advertising ID and may collect device and usage data, subject to your consent choice. Ads never appear while you edit, and ReelMint Pro removes them completely. If you buy Pro, payment is handled by Razorpay (UPI, card, netbanking or wallet): Razorpay receives your payment details, ReelMint only keeps the payment id on this device to remember that you own Pro.", style = MaterialTheme.typography.bodyMedium)
                 if (Ads.privacyOptionsRequired(ctx)) OutlinedButton({ ctx.findActivity()?.let(Ads::showPrivacyOptions) }) { Icon(Icons.Default.PrivacyTip, null); Text(" Ad privacy choices") }
                 HorizontalDivider()
                 Text("Storage", style = MaterialTheme.typography.titleSmall)
                 Text("Temporary files: ${"%.1f".format(bytes / 1_048_576f)} MB (camera clips, voiceovers, unfinished exports). Your originals and saved results are not affected.", style = MaterialTheme.typography.bodyMedium)
                 OutlinedButton({ tempFiles(ctx).forEach { it.delete() }; bytes = tempFiles(ctx).sumOf { it.length() } }, enabled = bytes > 0) { Icon(Icons.Default.CleaningServices, null); Text(" Clear temporary files") }
                 HorizontalDivider()
+                val prefs = remember { ctx.getSharedPreferences("app", android.content.Context.MODE_PRIVATE) }
+                Text("Appearance", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Reduce motion", style = MaterialTheme.typography.bodyMedium)
+                        Text("Turns off the moving backgrounds and sparkles. Saves battery on older phones.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(MotionPrefs.reduce, { MotionPrefs.set(prefs, it) })
+                }
+                Text("App theme", style = MaterialTheme.typography.bodyMedium)
+                ProChipRow(AppTheme.entries, ThemePrefs.active, { it.label }, { !Entitlements.theme(it, Pro.isPro) }, "Pro app themes") { ThemePrefs.set(prefs, it) }
+                HorizontalDivider()
+                Text("Enjoying ReelMint?", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton({ ctx.startActivity(AppPromo.shareIntent(ctx)) }) { Icon(Icons.Default.Share, null); Text(" Tell a friend") }
+                    OutlinedButton({ AppPromo.rate(ctx) }) { Icon(Icons.Default.Star, null); Text(" Rate us") }
+                }
                 TextButton(onReplayIntro) { Text("Show the intro again") }
             }
         },
@@ -129,22 +160,39 @@ fun Onboarding(onDone: () -> Unit) {
     )
     val state = rememberPagerState { pages.size }
     val scope = rememberCoroutineScope()
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    val page = pages[state.currentPage]
+    val from by androidx.compose.animation.animateColorAsState(page.from, androidx.compose.animation.core.tween(500), label = "introFrom")
+    val to by androidx.compose.animation.animateColorAsState(page.to, androidx.compose.animation.core.tween(500), label = "introTo")
+    AuroraBackground(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), colors = listOf(from, to, Studio.Violet), intensity = 1.25f) {
+        Sparkles(Modifier.fillMaxSize(), count = 28)
         HorizontalPager(state, Modifier.fillMaxSize()) { i ->
             val p = pages[i]
+            val offset = (state.currentPage - i) + state.currentPageOffsetFraction     // 0 when centred, ±1 one page away
             Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Box(Modifier.size(160.dp).clip(CircleShape).background(Studio.tile(p.from, p.to)), contentAlignment = Alignment.Center) { Icon(p.icon, null, Modifier.size(72.dp), tint = Color.White) }
+                Box(Modifier.graphicsLayer { translationX = offset * 260f; alpha = 1f - kotlin.math.abs(offset) * 0.8f }.size(210.dp), contentAlignment = Alignment.Center) {
+                    PulseRings(Modifier.fillMaxSize(), p.from)
+                    Box(Modifier.floating(8.dp, 3000).size(150.dp).clip(CircleShape).background(Studio.tile(p.from, p.to)).sheen(strength = 0.3f), contentAlignment = Alignment.Center) {
+                        Icon(p.icon, null, Modifier.size(68.dp), tint = Color.White)
+                    }
+                }
                 Spacer(Modifier.height(32.dp))
-                Text(p.title, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
-                Spacer(Modifier.height(12.dp))
-                Text(p.body, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.graphicsLayer { translationX = offset * 90f; alpha = 1f - kotlin.math.abs(offset) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(p.title, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(12.dp))
+                    Text(p.body, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onDone) { Text("Skip") }
             Spacer(Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                repeat(pages.size) { Box(Modifier.size(if (it == state.currentPage) 10.dp else 8.dp).clip(CircleShape).background(if (it == state.currentPage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                repeat(pages.size) {
+                    val sel = it == state.currentPage
+                    val w by androidx.compose.animation.core.animateDpAsState(if (sel) 24.dp else 8.dp, androidx.compose.animation.core.spring(0.6f), label = "dot")
+                    val c by androidx.compose.animation.animateColorAsState(if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, label = "dotC")
+                    Box(Modifier.height(8.dp).width(w).clip(CircleShape).background(c))
+                }
             }
             Spacer(Modifier.weight(1f))
             Button({ if (state.currentPage == pages.lastIndex) onDone() else scope.launch { state.animateScrollToPage(state.currentPage + 1) } }, shape = RoundedCornerShape(14.dp)) {

@@ -58,7 +58,9 @@ fun OverlayLayer(p: VideoProject, posMs: Long, sel: OverlaySel?, editing: Boolea
                     CaptionStyle.HIGHLIGHT -> Color.Black to Color(0xFFFFD43B)
                     CaptionStyle.NEON -> Color(0xFF2DD4BF) to Color.Transparent
                     CaptionStyle.BOLD -> Color(0xFFFFD43B) to Color.Transparent
-                    CaptionStyle.CLASSIC -> Color.White to Color.Transparent
+                    CaptionStyle.CLASSIC, CaptionStyle.OUTLINE -> Color.White to Color.Transparent
+                    CaptionStyle.PINK_GLOW -> Color(0xFFFF7AB8) to Color.Transparent
+                    CaptionStyle.SUNSET -> Color(0xFFFFB84D) to Color.Transparent
                 }
                 Text(
                     c.text, Modifier.align(BiasAlignment(c.x, -c.y)).widthIn(max = with(density) { (w * 0.88f).toDp() }).layer(s, active)

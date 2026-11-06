@@ -1,6 +1,7 @@
-.gradle/
 build/
-local.properties
+.gradle/
+.idea/
 *.jks
 *.keystore
-.idea/
+local.properties
+tools/.fixtures/

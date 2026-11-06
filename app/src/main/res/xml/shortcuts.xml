@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="reel" android:enabled="true" android:icon="@drawable/ic_shortcut_reel" android:shortcutShortLabel="@string/shortcut_reel" android:shortcutLongLabel="@string/shortcut_reel_long">
+        <intent android:action="com.sarath.photovideo.action.REEL" android:targetPackage="com.sarath.photovideo" android:targetClass="com.sarath.photovideo.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="slideshow" android:enabled="true" android:icon="@drawable/ic_shortcut_slideshow" android:shortcutShortLabel="@string/shortcut_slideshow" android:shortcutLongLabel="@string/shortcut_slideshow_long">
+        <intent android:action="com.sarath.photovideo.action.SLIDESHOW" android:targetPackage="com.sarath.photovideo" android:targetClass="com.sarath.photovideo.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="photo" android:enabled="true" android:icon="@drawable/ic_shortcut_photo" android:shortcutShortLabel="@string/shortcut_photo" android:shortcutLongLabel="@string/shortcut_photo_long">
+        <intent android:action="com.sarath.photovideo.action.PHOTO" android:targetPackage="com.sarath.photovideo" android:targetClass="com.sarath.photovideo.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="ringtone" android:enabled="true" android:icon="@drawable/ic_shortcut_ringtone" android:shortcutShortLabel="@string/shortcut_ringtone" android:shortcutLongLabel="@string/shortcut_ringtone_long">
+        <intent android:action="com.sarath.photovideo.action.RINGTONE" android:targetPackage="com.sarath.photovideo" android:targetClass="com.sarath.photovideo.MainActivity" />
+    </shortcut>
+</shortcuts>

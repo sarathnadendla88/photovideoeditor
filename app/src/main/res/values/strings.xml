@@ -6,4 +6,12 @@
     <string name="admob_app_id" translatable="false">ca-app-pub-3616682474690401~2596473164</string>
     <string name="admob_banner_id" translatable="false">ca-app-pub-3616682474690401/7868981145</string>
     <string name="admob_interstitial_id" translatable="false">ca-app-pub-3616682474690401/4668102735</string>
+    <string name="shortcut_reel">New Reel</string>
+    <string name="shortcut_reel_long">Record a new Reel</string>
+    <string name="shortcut_slideshow">Slideshow</string>
+    <string name="shortcut_slideshow_long">Make a photo slideshow</string>
+    <string name="shortcut_photo">Edit photo</string>
+    <string name="shortcut_photo_long">Edit a photo</string>
+    <string name="shortcut_ringtone">Ringtone</string>
+    <string name="shortcut_ringtone_long">Make a ringtone</string>
 </resources>

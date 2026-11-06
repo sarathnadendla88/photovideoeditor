@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the Pro purchase record is backed up (so Pro returns after a reinstall or on a new phone). Photos, videos, drafts and settings are not. -->
+<full-backup-content>
+    <include domain="sharedpref" path="pro.xml" />
+</full-backup-content>

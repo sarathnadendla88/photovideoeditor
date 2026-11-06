@@ -39,6 +39,7 @@ class HomeNavigationTest {
     private val ctx get() = TestUtil.ctx
 
     @Before fun fresh() {
+        Pro.init(ctx); Pro.reset()   // every test starts as a free user
         ctx.getSharedPreferences("app", 0).edit().putBoolean("intro_done", true).commit()
         File(ctx.filesDir, "slideshow_draft").deleteRecursively()
     }
@@ -104,7 +105,7 @@ class HomeNavigationTest {
         launch().use {
             rule.waitText("ReelMint")
             rule.onNodeWithContentDescription("Settings and privacy").performClick()
-            rule.onNodeWithText("Show the intro again").performClick()
+            rule.onNodeWithText("Show the intro again").performScrollTo().performClick()
             rule.waitText("Create anything"); rule.onNodeWithText("Next").performClick()
             rule.waitText("Private by design"); rule.onNodeWithText("Skip").performClick()
             rule.waitText("ReelMint")
@@ -127,6 +128,43 @@ class HomeNavigationTest {
         launch(i).use { rule.waitText("3 photos", 30_000, substring = true) }
     }
 
+    @Test fun launcherShortcutsAreRegisteredWithAndroid() {
+        val sm = ctx.getSystemService(android.content.pm.ShortcutManager::class.java)
+        val ids = sm.manifestShortcuts.map { it.id }.toSet()
+        assertEquals(setOf("reel", "slideshow", "photo", "ringtone"), ids)
+        sm.manifestShortcuts.forEach { assertTrue("${it.id} needs a label", !it.shortLabel.isNullOrBlank()) }
+    }
+
+    @Test fun eachShortcutActionOpensItsScreen() {
+        val cases = listOf(Shortcuts.PHOTO to "Start with a photo", Shortcuts.SLIDESHOW to "Turn photos into a video",
+            Shortcuts.RINGTONE to "Make your own ringtone", Shortcuts.VIDEO to "Add your videos")
+        for ((action, expect) in cases) {
+            launch(Intent(action).setClassName(ctx, MainActivity::class.java.name)).use { rule.waitText(expect, 20_000) }
+        }
+    }
+
+    @Test fun reelShortcutOpensTheCameraInReelMode() {
+        launch(Intent(Shortcuts.REEL).setClassName(ctx, MainActivity::class.java.name)).use {
+            rule.waitUntil(20_000) { rule.onAllNodesWithText("clips", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        }
+    }
+
+    @Test fun gifMakerOpensFromHomeAndOffersPickAndRecord() {
+        launch().use {
+            rule.waitText("ReelMint"); rule.onNodeWithText("GIF maker").performScrollTo().performClick()
+            rule.waitText("Turn a video into a GIF"); rule.waitText("Pick a video"); rule.waitText("Record a video")
+            rule.onNodeWithContentDescription("Back").performClick(); rule.waitText("Tools")
+        }
+    }
+
+    @Test fun settingsHasShareAndRateButtons() {
+        launch().use {
+            rule.waitText("ReelMint")
+            rule.onNodeWithContentDescription("Settings and privacy").performClick()
+            rule.waitText("Tell a friend"); rule.waitText("Rate us")
+        }
+    }
+
     @Test fun garbageShareDoesNotCrash() {
         val i = Intent(Intent.ACTION_SEND).setClassName(ctx, MainActivity::class.java.name).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "hello")
         launch(i).use { rule.waitText("ReelMint") }
@@ -138,7 +176,7 @@ class ScreenFlowTest {
     @get:Rule val rule = createComposeRule()
     private val app get() = TestUtil.ctx.applicationContext as Application
 
-    @Before fun clean() { File(TestUtil.ctx.filesDir, "slideshow_draft").deleteRecursively() }
+    @Before fun clean() { Pro.init(TestUtil.ctx); Pro.reset(); File(TestUtil.ctx.filesDir, "slideshow_draft").deleteRecursively() }
 
     // ---------- Photo editor ----------
     private fun openPhoto() {
@@ -188,6 +226,44 @@ class ScreenFlowTest {
         rule.onNodeWithContentDescription("Save copy").performClick()
         rule.waitText("Saved a copy", 60_000, substring = true)
         assertEquals(before + 1, TestUtil.countIn(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "Pictures/PhotoVideoStudio"))
+    }
+
+    @Test fun freeUsersSeeProFiltersAndEffectsLockedAndTheSheetNamesThem() {
+        openPhoto(); rule.tab("Filters"); rule.waitText("Cinema")
+        rule.tapText("Cinema", substring = false); rule.waitText("To use: Pro filters"); rule.onNodeWithContentDescription("Undo").assertIsNotEnabled()
+    }
+
+    @Test fun freeUsersCannotApplyAProEffect() {
+        openPhoto(); rule.tab("Effects"); rule.waitText("Fun effects")
+        rule.tapText("Cartoon", substring = false); rule.waitText("To use: Pro photo effects"); rule.onNodeWithContentDescription("Undo").assertIsNotEnabled()
+    }
+
+    @Test fun proUsersApplyProFiltersAndEffectsDirectly() {
+        Pro.init(TestUtil.ctx); Pro.grant("pay_DEVICETEST0002")
+        try {
+            openPhoto(); rule.tab("Filters"); rule.tapText("Cinema", substring = false); rule.onNodeWithContentDescription("Undo").assertIsEnabled()
+            rule.tab("Effects"); rule.tapText("Cartoon", substring = false); rule.waitText("Strength"); assertEquals(0, rule.onAllNodesWithText("To use:", substring = true).fetchSemanticsNodes().size)
+        } finally { Pro.reset() }
+    }
+
+    @Test fun stickerPacksShowClassicFreeAndLockTheRest() {
+        openPhoto(); rule.tab("Stickers"); rule.waitText("Classic"); rule.tapText("Party", substring = false); rule.waitText("To use: Pro sticker packs")
+    }
+
+    @Test fun freeUsersGetThreeSavedLooksThenAnUpgradePrompt() {
+        TestUtil.ctx.getSharedPreferences("looks", 0).edit().clear().commit()
+        val store = LookStore(TestUtil.ctx); repeat(3) { store.save(PhotoEdit(filter = PhotoFilter.SEPIA).toLook("Look $it")) }
+        openPhoto(); rule.tab("Filters"); rule.tapText(" Save look"); rule.onNodeWithText("Name").performTextInput("A fourth"); rule.onNodeWithText("Save", substring = false).performClick()
+        rule.waitText("More than 3 saved looks"); TestUtil.ctx.getSharedPreferences("looks", 0).edit().clear().commit()
+    }
+
+    @Test fun photoEffectsTabAppliesAndUndoes() {
+        openPhoto()
+        rule.tab("Effects"); rule.waitText("Fun effects", 10_000)
+        rule.tapText("Sketch", false)
+        rule.onNodeWithContentDescription("Undo").assertIsEnabled()
+        rule.tapText("Glitch", false); rule.waitText("Strength", 10_000)
+        rule.onNodeWithContentDescription("Undo").performClick(); rule.onNodeWithContentDescription("Redo").assertIsEnabled()
     }
 
     @Test fun photoPortraitBlurRunsWithoutCrash() {
@@ -276,6 +352,47 @@ class ScreenFlowTest {
         assertTrue(vm.project.value.clips.any { it.freeze })
         rule.onAllNodesWithContentDescription("Remove clip").onFirst().performScrollTo().performClick()
         assertEquals(3, vm.project.value.clips.size)
+    }
+
+    @Test fun freeUsersSeeProFontsAndFramesLockedInThePhotoEditor() {
+        openPhoto(); rule.tab("Text"); rule.tapText("Add text", substring = false); rule.waitText("Typewriter")
+        rule.tapText("Typewriter", substring = false); rule.waitText("To use: Pro fonts")
+    }
+
+    @Test fun freeUsersCannotPickAProPhotoFrame() {
+        openPhoto(); rule.tab("Frame"); rule.waitText("Polaroid"); rule.tapText("Polaroid", substring = false); rule.waitText("To use: Pro photo frames")
+    }
+
+    @Test fun freeUsersSeeEveryNewProVideoControlLockedAndNothingChanges() {
+        val vm = videoEditor()
+        rule.tapText("8.0×", false); rule.waitText("To use: Slow-mo 0.1× and timelapse 5× / 8×"); assertEquals(1f, vm.project.value.clips[0].speed, 0f)
+    }
+
+    @Test fun freeUsersCannotUseProCaptionStylesVoicesTransitionsOrALogo() {
+        val vm = videoEditor()
+        rule.tab("Captions"); rule.tapText("Add text", false); rule.waitUntil(10_000) { vm.project.value.captions.size == 1 }
+        rule.tapText("Outline", substring = false); rule.waitText("To use: Pro caption styles"); assertEquals(CaptionStyle.BOXED, vm.project.value.captionStyle)
+    }
+
+    @Test fun freeUsersCannotUseTheRobotVoice() {
+        val vm = videoEditor(); rule.tab("Audio"); rule.tapText("Robot", substring = false); rule.waitText("To use: Pro voice effects"); assertEquals(VoiceFx.NORMAL, vm.project.value.originalVoice)
+    }
+
+    @Test fun freeUsersGetAnInvitationInsteadOfALogoPicker() {
+        videoEditor(); rule.tab("Output"); rule.waitText("Your logo"); rule.tapText("Add your logo"); rule.waitText("To use: Your own logo on every export")
+    }
+
+    @Test fun proUsersUseTheNewVideoControlsDirectly() {
+        Pro.init(TestUtil.ctx); Pro.grant("pay_DEVICETEST0003")
+        try {
+            val vm = videoEditor()
+            rule.tapText("8.0×", false); assertEquals(8f, vm.project.value.clips[0].speed, 0f)
+            rule.tab("Audio"); rule.tapText("Robot", substring = false); assertEquals(VoiceFx.ROBOT, vm.project.value.originalVoice)
+            rule.tab("Captions"); rule.tapText("Add text", false); rule.waitUntil(10_000) { vm.project.value.captions.size == 1 }
+            rule.tapText("Outline", substring = false); assertEquals(CaptionStyle.OUTLINE, vm.project.value.captionStyle)
+            rule.tab("Output"); rule.tapText("Flash white", substring = false); assertEquals(Transition.FLASH, vm.project.value.transition)
+            assertEquals("no upgrade prompts for Pro", 0, rule.onAllNodesWithText("To use:", substring = true).fetchSemanticsNodes().size)
+        } finally { Pro.reset() }
     }
 
     @Test fun videoSpeedLookCaptionStickerAndAudioControls() {

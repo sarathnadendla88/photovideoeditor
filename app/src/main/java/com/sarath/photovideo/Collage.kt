@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Cells are normalised rectangles (l, t, r, b). */
-enum class CollageLayout(val label: String, val cells: List<FloatArray>) {
+enum class CollageLayout(val label: String, val cells: List<FloatArray>, val pro: Boolean = false) {
     SIDE("2 across", listOf(floatArrayOf(0f, 0f, .5f, 1f), floatArrayOf(.5f, 0f, 1f, 1f))),
     STACK("2 stacked", listOf(floatArrayOf(0f, 0f, 1f, .5f), floatArrayOf(0f, .5f, 1f, 1f))),
     COLS3("3 columns", List(3) { floatArrayOf(it / 3f, 0f, (it + 1) / 3f, 1f) }),
@@ -37,6 +37,13 @@ enum class CollageLayout(val label: String, val cells: List<FloatArray>) {
     BIG_TOP("1 + 3", listOf(floatArrayOf(0f, 0f, 1f, .6f), floatArrayOf(0f, .6f, 1f / 3, 1f), floatArrayOf(1f / 3, .6f, 2f / 3, 1f), floatArrayOf(2f / 3, .6f, 1f, 1f))),
     GRID4("2 × 2", listOf(floatArrayOf(0f, 0f, .5f, .5f), floatArrayOf(.5f, 0f, 1f, .5f), floatArrayOf(0f, .5f, .5f, 1f), floatArrayOf(.5f, .5f, 1f, 1f))),
     GRID6("3 × 2", List(6) { floatArrayOf((it % 3) / 3f, (it / 3) / 2f, (it % 3 + 1) / 3f, (it / 3 + 1) / 2f) }),
+    // Pro layouts
+    GRID9("3 × 3", List(9) { floatArrayOf((it % 3) / 3f, (it / 3) / 3f, (it % 3 + 1) / 3f, (it / 3 + 1) / 3f) }, pro = true),
+    GRID8("4 × 2", List(8) { floatArrayOf((it % 4) / 4f, (it / 4) / 2f, (it % 4 + 1) / 4f, (it / 4 + 1) / 2f) }, pro = true),
+    COLS4("4 columns", List(4) { floatArrayOf(it / 4f, 0f, (it + 1) / 4f, 1f) }, pro = true),
+    ONE_FOUR("1 + 4", listOf(floatArrayOf(0f, 0f, .5f, 1f), floatArrayOf(.5f, 0f, .75f, .5f), floatArrayOf(.75f, 0f, 1f, .5f), floatArrayOf(.5f, .5f, .75f, 1f), floatArrayOf(.75f, .5f, 1f, 1f)), pro = true),
+    TWO_THREE("2 + 3", listOf(floatArrayOf(0f, 0f, .5f, .5f), floatArrayOf(.5f, 0f, 1f, .5f), floatArrayOf(0f, .5f, 1f / 3, 1f), floatArrayOf(1f / 3, .5f, 2f / 3, 1f), floatArrayOf(2f / 3, .5f, 1f, 1f)), pro = true),
+    HERO_STRIP("Hero + strip", listOf(floatArrayOf(0f, 0f, 1f, .72f), floatArrayOf(0f, .72f, .25f, 1f), floatArrayOf(.25f, .72f, .5f, 1f), floatArrayOf(.5f, .72f, .75f, 1f), floatArrayOf(.75f, .72f, 1f, 1f)), pro = true),
 }
 enum class CollageShape(val label: String, val w: Int, val h: Int) { SQUARE("1:1", 1, 1), P45("4:5", 4, 5), STORY("9:16", 9, 16), WIDE("16:9", 16, 9) }
 
@@ -130,7 +137,7 @@ fun CollageScreen(incoming: Uri? = null, onConsumed: () -> Unit = {}, onTakePhot
             }
             if (photos.isNotEmpty()) Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState()).padding(Studio.Gutter), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Layout", style = MaterialTheme.typography.titleSmall)
-                ChipRow(CollageLayout.entries, layout, { it.label }) { layout = it }
+                ProChipRow(CollageLayout.entries, layout, { it.label }, { !Entitlements.collageLayout(it, Pro.isPro) }, "Pro collage layouts") { layout = it }
                 Text("Shape", style = MaterialTheme.typography.titleSmall)
                 ChipRow(CollageShape.entries, shape, { it.label }) { shape = it }
                 LabeledSlider("Spacing", spacing, 0f..0.08f) { spacing = it }

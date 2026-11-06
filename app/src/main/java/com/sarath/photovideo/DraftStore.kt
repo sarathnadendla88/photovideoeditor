@@ -29,6 +29,8 @@ class DraftStore(private val context: Context) {
             .put("seconds", p.secondsPerPhoto.toDouble())
             .put("canvas", p.canvas.name).put("quality", p.quality.name).put("motion", p.motion.name)
             .put("title", p.title).put("endText", p.endText).put("transition", p.transition.name).put("watermark", p.watermark)
+            .put("beatSync", p.beatSync).put("beatsPerPhoto", p.beatsPerPhoto).put("beats", JSONArray(p.beats))
+            .put("logoUri", p.logoUri ?: "").put("logoCorner", p.logoCorner.name)
             .put("slideCaptions", JSONObject(p.slideCaptions as Map<*, *>))
             .put("stickers", JSONArray(p.stickers.map { st -> JSONObject().put("emoji", st.emoji).put("x", st.x.toDouble()).put("y", st.y.toDouble()).put("size", st.size.toDouble()).put("rotation", st.rotation.toDouble()).put("image", st.imageUri ?: "") }))
         p.music?.let {
@@ -60,6 +62,11 @@ class DraftStore(private val context: Context) {
             j.optJSONArray("stickers")?.let { a -> List(a.length()) { i -> a.getJSONObject(i).let { o -> VideoSticker(o.getString("emoji"), o.getDouble("x").toFloat(), o.getDouble("y").toFloat(), o.getDouble("size").toFloat(), rotation = o.getDouble("rotation").toFloat(), imageUri = o.optString("image").ifEmpty { null }) } } }
                 .orEmpty().filter { st -> st.imageUri == null || readable(Uri.parse(st.imageUri)) },
             music,
+            j.optBoolean("beatSync"), j.optInt("beatsPerPhoto", 2),
+            j.optJSONArray("beats")?.let { a -> List(a.length()) { a.getLong(it) } }.orEmpty(),
+            false,
+            j.optString("logoUri").takeIf { it.isNotBlank() && readable(Uri.parse(it)) },
+            runCatching { LogoCorner.valueOf(j.optString("logoCorner")) }.getOrDefault(LogoCorner.BOTTOM_RIGHT),
         )
     }.getOrNull()
 }

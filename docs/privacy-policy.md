@@ -28,6 +28,7 @@ ReelMint lets you edit photos, cut and edit videos, make slideshows and collages
 
 - There is **no account** and no sign-in.
 - We do not use analytics or crash-reporting tools, and we do not collect your name, email, phone number, contacts, precise location or the content of your media.
+- We do not receive your payment details: they go to Razorpay (section 5).
 
 ## 4. Advertising (Google AdMob)
 
@@ -43,39 +44,48 @@ This information goes to Google and its advertising partners, **not to us**, and
 
 **Consent and choices.** Where the law requires it (for example in the European Economic Area, the UK and some other regions), the app asks for your consent through Google's consent form before any ad is requested. If you decline, ads may be limited or not shown. You can review your choice later in Settings → "Ad privacy choices" when it is available for your region. You can also reset your advertising ID or opt out of ads personalisation in Android Settings → Google → Ads (the exact path varies by device).
 
-## 5. Permissions the app uses
+## 5. ReelMint Pro purchase (Razorpay)
+
+- ReelMint Pro is an **optional**, one-time payment (the price is shown in the app) that removes ads and unlocks extra tools. There is no subscription.
+- Payments are processed by **Razorpay** (Razorpay Software Private Limited). When you pay, you type your payment details (UPI, card, netbanking or wallet) and your mobile number and email on **Razorpay's own screen**. **ReelMint never sees or stores your card, UPI or bank details.** Razorpay's privacy policy governs what it collects: https://razorpay.com/privacy/
+- After a successful payment ReelMint keeps only the **payment ID and the date** on your device, to remember that you own Pro. This small record is included in Android's cloud backup and device transfer so Pro can return after a reinstall; nothing else from the app is backed up.
+- Your photos, videos and audio are never part of a payment and never sent to Razorpay.
+
+## 6. Permissions the app uses
 
 | Permission | Why |
 |---|---|
 | Camera | Take photos and record videos or reels, only when you choose to. |
 | Microphone | Record audio with a video or a voiceover, only when you choose to. |
-| Internet and network state | Needed only to load ads and the consent form. Editing works without a connection. |
+| Internet and network state | Needed only to load ads and the consent form and to complete a Pro payment. Editing works without a connection. |
 | Advertising ID | Used by Google's advertising SDK, subject to your consent choices. |
+| NFC and basic phone state | Added by Razorpay's payment library for its checkout screen (for example tap-to-pay cards). ReelMint itself does not use them. |
 | Modify system settings | Used only when you tap "Set as ringtone / notification / alarm" in the Ringtone maker. Android asks you to allow it first. |
 
-## 6. Where your information is kept and for how long
+## 7. Where your information is kept and for how long
 
 - Your media and drafts stay on your device until you delete them or uninstall the app.
 - We keep no copy of anything you create, because it never reaches us.
 - Information collected by Google for advertising is kept according to Google's own policies.
+- The Pro record (payment ID and date) stays on your device and in your Android backup until you uninstall the app or clear its data. Razorpay keeps payment records according to its own policy and the law.
 
-## 7. Children
+## 8. Children
 
 ReelMint is **not directed to children under 13**, and we do not knowingly collect personal information from children. If you believe a child has provided information through the app, contact us and we will help.
 
-## 8. Your rights
+## 9. Your rights
 
 Depending on where you live, you may have rights over personal data, such as access, correction, deletion, objection and withdrawing consent (for example under the GDPR or the CCPA). Because we do not collect or store your personal data, there is generally nothing for us to retrieve or delete, but you can contact us with any request. For data held by Google for advertising, use Google's privacy controls.
 
-## 9. Security
+## 10. Security
 
 Your content stays in the app's private storage and in the folders you can see in your gallery. We do not transmit it. No method of storage is perfectly secure, so keep your device locked and updated.
 
-## 10. Changes to this policy
+## 11. Changes to this policy
 
 If we change how the app handles information, we will update this page and the "Effective date" above. When a change is significant we will tell you in the app.
 
-## 11. Contact
+## 12. Contact
 
 Questions or requests: **[YOUR CONTACT EMAIL]**
 [YOUR POSTAL ADDRESS, if you want to include one]

@@ -14,11 +14,11 @@ import androidx.media3.transformer.Effects
 import java.nio.ByteBuffer
 
 /** How the picture moves between clips / photos. Media3 has no cross-dissolve, so these are fades through black. */
-enum class Transition(val label: String) { NONE("None"), EDGES("Fade in & out"), DIP("Dip to black") }
+enum class Transition(val label: String, val pro: Boolean = false) { NONE("None"), EDGES("Fade in & out"), DIP("Dip to black"), FLASH("Flash white", true) }
 
 /** Black full-frame overlay whose opacity ramps to fade a clip in from / out to black. */
-class FadeOverlay(private val w: Int, private val h: Int, private val clipUs: Long, private val inUs: Long, private val outUs: Long) : BitmapOverlay() {
-    private val black = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { it.eraseColor(Color.BLACK) }
+class FadeOverlay(private val w: Int, private val h: Int, private val clipUs: Long, private val inUs: Long, private val outUs: Long, color: Int = Color.BLACK) : BitmapOverlay() {
+    private val black = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { it.eraseColor(color) }
     override fun getBitmap(presentationTimeUs: Long): Bitmap = black
     override fun getTextureSize(presentationTimeUs: Long) = Size(w, h)
     override fun getOverlaySettings(presentationTimeUs: Long): OverlaySettings {
@@ -33,10 +33,10 @@ class FadeOverlay(private val w: Int, private val h: Int, private val clipUs: Lo
 /** Fade overlay for item [index] of [count], or null when no fade applies to it. */
 fun fadeFor(t: Transition, index: Int, count: Int, w: Int, h: Int, clipMs: Long): FadeOverlay? {
     val fade = minOf(400L, clipMs / 3) * 1000
-    val fadeIn = when (t) { Transition.NONE -> false; Transition.EDGES -> index == 0; Transition.DIP -> true }
-    val fadeOut = when (t) { Transition.NONE -> false; Transition.EDGES -> index == count - 1; Transition.DIP -> true }
+    val fadeIn = when (t) { Transition.NONE -> false; Transition.EDGES -> index == 0; Transition.DIP, Transition.FLASH -> true }
+    val fadeOut = when (t) { Transition.NONE -> false; Transition.EDGES -> index == count - 1; Transition.DIP, Transition.FLASH -> true }
     if (!fadeIn && !fadeOut) return null
-    return FadeOverlay(w, h, clipMs * 1000, if (fadeIn) fade else 0, if (fadeOut) fade else 0)
+    return FadeOverlay(w, h, clipMs * 1000, if (fadeIn) fade else 0, if (fadeOut) fade else 0, if (t == Transition.FLASH) Color.WHITE else Color.BLACK)
 }
 
 /** Small semi-transparent text tag in the bottom-right corner (brand / credit). */
@@ -47,6 +47,78 @@ fun watermarkOverlay(text: String, canvasWidth: Int): BitmapOverlay {
     val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
     Canvas(bmp).drawText(text, size / 2, size * 1.15f, p)
     return BitmapOverlay.createStaticBitmapOverlay(bmp, StaticOverlaySettings.Builder().setBackgroundFrameAnchor(0.94f, -0.94f).setOverlayFrameAnchor(1f, -1f).setAlphaScale(0.8f).build())
+}
+
+/** The small "Made with ReelMint" tag on free exports, bottom-left (the user's own watermark uses the bottom-right). */
+fun brandTagOverlay(canvasWidth: Int): BitmapOverlay {
+    val size = canvasWidth / 34f
+    val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = size; color = Color.WHITE; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD); setShadowLayer(size / 6, 0f, 0f, Color.BLACK) }
+    val w = (p.measureText(Entitlements.TAG_TEXT) + size).toInt().coerceAtLeast(8); val h = (size * 1.6f).toInt()
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    Canvas(bmp).drawText(Entitlements.TAG_TEXT, size / 2, size * 1.15f, p)
+    return BitmapOverlay.createStaticBitmapOverlay(bmp, StaticOverlaySettings.Builder().setBackgroundFrameAnchor(-0.94f, -0.94f).setOverlayFrameAnchor(-1f, -1f).setAlphaScale(0.8f).build())
+}
+
+/**
+ * "Robot" voice: ring modulation. Each sample is multiplied by (1 - depth) + depth * sin(2π f t), so the voice is chopped
+ * by a low tone, the classic metallic sound. [depth] 1 is pure ring modulation; lower keeps more of the original voice.
+ */
+class RobotAudioProcessor(private val freqHz: Float = 70f, private val depth: Float = 0.6f) : BaseAudioProcessor() {
+    private var frame = 0L
+    override fun onConfigure(f: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+        if (f.encoding != androidx.media3.common.C.ENCODING_PCM_16BIT) throw AudioProcessor.UnhandledAudioFormatException(f)
+        return f
+    }
+    override fun onReset() { frame = 0 }
+    override fun onFlush() { frame = 0 }
+    override fun queueInput(input: ByteBuffer) {
+        val ch = inputAudioFormat.channelCount; val rate = inputAudioFormat.sampleRate
+        val out = replaceOutputBuffer(input.remaining())
+        val step = 2.0 * Math.PI * freqHz / rate
+        while (input.remaining() >= 2 * ch) {
+            val g = (1f - depth) + depth * Math.sin(step * frame).toFloat()
+            repeat(ch) { out.putShort((input.short * g).toInt().coerceIn(-32768, 32767).toShort()) }
+            frame++
+        }
+        out.flip()
+    }
+}
+
+/** "Echo" voice: a feedback delay, y[n] = x[n] + feedback * y[n - delay]. Same length out as in (the tail is cut at the end of the clip). */
+class EchoAudioProcessor(private val delayMs: Int = 280, private val feedback: Float = 0.45f) : BaseAudioProcessor() {
+    private var line = FloatArray(0); private var pos = 0; private var delayFrames = 0
+    override fun onConfigure(f: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+        if (f.encoding != androidx.media3.common.C.ENCODING_PCM_16BIT) throw AudioProcessor.UnhandledAudioFormatException(f)
+        delayFrames = (f.sampleRate * delayMs / 1000).coerceAtLeast(1); line = FloatArray(delayFrames * f.channelCount); pos = 0
+        return f
+    }
+    override fun onReset() { line = FloatArray(0); pos = 0 }
+    override fun onFlush() { java.util.Arrays.fill(line, 0f); pos = 0 }
+    override fun queueInput(input: ByteBuffer) {
+        val ch = inputAudioFormat.channelCount
+        val out = replaceOutputBuffer(input.remaining())
+        while (input.remaining() >= 2 * ch) {
+            for (c in 0 until ch) {
+                val i = pos * ch + c
+                val y = (input.short + feedback * line[i]).coerceIn(-32768f, 32767f)
+                line[i] = y; out.putShort(y.toInt().toShort())
+            }
+            pos = (pos + 1) % delayFrames
+        }
+        out.flip()
+    }
+}
+
+/** Which corner the user's own logo sits in. */
+enum class LogoCorner(val label: String, val ax: Float, val ay: Float) {
+    TOP_LEFT("Top left", -0.94f, 0.94f), TOP_RIGHT("Top right", 0.94f, 0.94f), BOTTOM_LEFT("Bottom left", -0.94f, -0.94f), BOTTOM_RIGHT("Bottom right", 0.94f, -0.94f),
+}
+
+/** Pro: the creator's own logo in a corner of the whole video. [widthFraction] is the logo's width as a fraction of the frame. */
+fun logoOverlay(ctx: android.content.Context, uri: String, corner: LogoCorner, canvasWidth: Int, widthFraction: Float = 0.17f): BitmapOverlay? {
+    val bmp = PhotoProcessor.decodeToWidth(ctx, android.net.Uri.parse(uri), (canvasWidth * widthFraction).toInt().coerceAtLeast(16)) ?: return null
+    return BitmapOverlay.createStaticBitmapOverlay(bmp, StaticOverlaySettings.Builder().setBackgroundFrameAnchor(corner.ax, corner.ay)
+        .setOverlayFrameAnchor(if (corner.ax < 0) -1f else 1f, if (corner.ay < 0) -1f else 1f).setAlphaScale(0.95f).build())
 }
 
 /** Linear gain ramp over the start and end of one audio item (16-bit PCM). */
