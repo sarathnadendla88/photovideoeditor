@@ -21,14 +21,14 @@ require(proPricePaise in 100..1_000_000) { "PRO_PRICE_PAISE out of range" }
 
 android {
     namespace = "com.video.framora"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.video.framora"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        targetSdk = 36
+        versionCode = 2
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "RAZORPAY_KEY_ID", "\"$razorpayKeyId\"")
         buildConfigField("String", "PAYMENT_API_URL", "\"$paymentApiUrl\"")

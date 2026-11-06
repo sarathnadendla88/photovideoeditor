@@ -16,6 +16,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -171,18 +173,25 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 fun EmptyState(icon: ImageVector, title: String, body: String, action: String, onAction: () -> Unit, secondAction: String? = null, onSecond: (() -> Unit)? = null) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(190.dp), contentAlignment = Alignment.Center) {
-            PulseRings(Modifier.fillMaxSize(), Studio.Violet)
-            Sparkles(Modifier.fillMaxSize(), count = 10)
-            Box(Modifier.floating(6.dp, 2800).size(92.dp).clip(CircleShape).background(Studio.tile(Studio.Violet, Studio.Coral)).sheen(strength = 0.3f), contentAlignment = Alignment.Center) {
-                Icon(icon, null, Modifier.size(44.dp), tint = Color.White)
+    // The card can sit in a short area (e.g. the video preview above the tool panel on a small phone). It scrolls and
+    // shrinks its artwork so the buttons always keep their full height and label instead of being squeezed.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val bounded = constraints.hasBoundedHeight
+        val compact = bounded && maxHeight < 480.dp
+        val art = if (compact) 84.dp else 190.dp
+        Column((if (bounded) Modifier.fillMaxSize().verticalScroll(rememberScrollState()) else Modifier.fillMaxWidth()).padding(horizontal = 32.dp, vertical = if (compact) 12.dp else 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp, Alignment.CenterVertically)) {
+            Box(Modifier.size(art), contentAlignment = Alignment.Center) {
+                PulseRings(Modifier.fillMaxSize(), Studio.Violet)
+                if (!compact) Sparkles(Modifier.fillMaxSize(), count = 10)
+                Box(Modifier.floating(if (compact) 3.dp else 6.dp, 2800).size(if (compact) 52.dp else 92.dp).clip(CircleShape).background(Studio.tile(Studio.Violet, Studio.Coral)).sheen(strength = 0.3f), contentAlignment = Alignment.Center) {
+                    Icon(icon, null, Modifier.size(if (compact) 26.dp else 44.dp), tint = Color.White)
+                }
             }
+            Text(title, style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, maxLines = if (compact) 3 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(4.dp))
+            Button(onAction, Modifier.fillMaxWidth(0.8f).heightIn(min = 52.dp), shape = RoundedCornerShape(16.dp)) { Text(action, maxLines = 1) }
+            if (secondAction != null && onSecond != null) OutlinedButton(onSecond, Modifier.fillMaxWidth(0.8f).heightIn(min = 52.dp), shape = RoundedCornerShape(16.dp)) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(8.dp)); Text(secondAction, maxLines = 1) }
         }
-        Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-        Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(4.dp))
-        Button(onAction, Modifier.fillMaxWidth(0.8f).height(52.dp), shape = RoundedCornerShape(16.dp)) { Text(action) }
-        if (secondAction != null && onSecond != null) OutlinedButton(onSecond, Modifier.fillMaxWidth(0.8f).height(52.dp), shape = RoundedCornerShape(16.dp)) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(8.dp)); Text(secondAction) }
     }
 }

@@ -2,8 +2,8 @@
 
 **Effective date:** 20 October 2026
 **App:** Framora: Video Editor & Reels (Android package `com.video.framora`)
-**Developer:** [YOUR NAME OR COMPANY NAME]
-**Contact:** [YOUR CONTACT EMAIL]
+**Developer:** [Sarath Nadendla]
+**Contact:** [sarathnadendla88@gmail.com]
 
 Framora lets you edit photos, cut and edit videos, make slideshows and collages, and record reels on your phone. This policy explains what the app does with your information. In short: **your photos, videos and audio stay on your device**, and the only data that leaves the app is what Google's advertising service collects to show ads.
 
@@ -87,5 +87,4 @@ If we change how the app handles information, we will update this page and the "
 
 ## 12. Contact
 
-Questions or requests: **[YOUR CONTACT EMAIL]**
-[YOUR POSTAL ADDRESS, if you want to include one]
+Questions or requests: **[sarathnadendla88@gmail.com]**
