@@ -1,6 +1,6 @@
-# ReelMint Pro: how payments work
+# Framora Pro: how payments work
 
-ReelMint Pro is **one payment, for life** (default ₹50, `PRO_PRICE_PAISE`). Checkout is **Razorpay Standard Checkout**. This follows the design of Resume Coach's `PAYMENTS.md`, extended with a tested payment server and a restore flow.
+Framora Pro is **one payment, for life** (default ₹50, `PRO_PRICE_PAISE`). Checkout is **Razorpay Standard Checkout**. This follows the design of Resume Coach's `PAYMENTS.md`, extended with a tested payment server and a restore flow.
 
 ## ⚠ Read this before publishing on Google Play
 
@@ -18,7 +18,7 @@ One source of truth: `Entitlements` in `Pro.kt`. The pricing screen is generated
 | | Free | Pro |
 |---|---|---|
 | Ads | Banner on home, short ad after some exports | None, anywhere (the ads SDK is never even started) |
-| "Made with ReelMint" tag | On video, slideshow and GIF exports (shown *before* exporting) | Never |
+| "Made with Framora" tag | On video, slideshow and GIF exports (shown *before* exporting) | Never |
 | Export quality | Small, Standard | + High (1080p) |
 | Slideshow templates | 5 | 19 (14 Pro, each with its own pace, canvas, motion, transition) |
 | Slideshow motions | 3 | 7 (+ Zoom out, Pan across, Drop in, Beat pulse) |

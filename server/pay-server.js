@@ -1,8 +1,8 @@
 'use strict';
 /**
- * ReelMint payment server (reference implementation, zero dependencies, Node 18+).
+ * Framora payment server (reference implementation, zero dependencies, Node 18+).
  * It holds the Razorpay key SECRET, which must never be in the app, and answers three questions for the app:
- *   POST /orders   -> create a Razorpay order for ReelMint Pro (the SERVER decides the price)
+ *   POST /orders   -> create a Razorpay order for Framora Pro (the SERVER decides the price)
  *   POST /verify   -> is this payment really paid, for this app and this price?
  *   POST /restore  -> same check starting from a payment id (new phone / reinstall)
  * Configure with environment variables only (never commit them):
@@ -38,7 +38,7 @@ function createServer({ env = process.env, fetchImpl = fetch, now = Date.now } =
 
   const handlers = {
     async '/orders'() {
-      const r = await rzp('/orders', { method: 'POST', body: JSON.stringify({ amount, currency: 'INR', receipt: crypto.randomUUID().slice(0, 36), notes: { product: PRODUCT, app: 'ReelMint' } }) });
+      const r = await rzp('/orders', { method: 'POST', body: JSON.stringify({ amount, currency: 'INR', receipt: crypto.randomUUID().slice(0, 36), notes: { product: PRODUCT, app: 'Framora' } }) });
       if (!r.ok) return [502, { error: 'order_failed' }];
       return [200, { orderId: r.body.id, amountPaise: r.body.amount, currency: r.body.currency, keyId }];
     },
@@ -79,5 +79,5 @@ module.exports = { createServer, PRODUCT };
 
 if (require.main === module) {
   const port = parseInt(process.env.PORT || '8080', 10);
-  createServer().listen(port, () => console.log(`ReelMint payment server on :${port}`));
+  createServer().listen(port, () => console.log(`Framora payment server on :${port}`));
 }

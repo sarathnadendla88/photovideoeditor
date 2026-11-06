@@ -1,11 +1,11 @@
-# Privacy Policy — ReelMint: Video & Photo Editor
+# Privacy Policy — Framora: Video Editor & Reels
 
 **Effective date:** 20 October 2026
-**App:** ReelMint: Video & Photo Editor (Android package `com.sarath.photovideo`)
+**App:** Framora: Video Editor & Reels (Android package `com.video.framora`)
 **Developer:** [YOUR NAME OR COMPANY NAME]
 **Contact:** [YOUR CONTACT EMAIL]
 
-ReelMint lets you edit photos, cut and edit videos, make slideshows and collages, and record reels on your phone. This policy explains what the app does with your information. In short: **your photos, videos and audio stay on your device**, and the only data that leaves the app is what Google's advertising service collects to show ads.
+Framora lets you edit photos, cut and edit videos, make slideshows and collages, and record reels on your phone. This policy explains what the app does with your information. In short: **your photos, videos and audio stay on your device**, and the only data that leaves the app is what Google's advertising service collects to show ads.
 
 ## 1. Your photos, videos and audio
 
@@ -14,7 +14,7 @@ ReelMint lets you edit photos, cut and edit videos, make slideshows and collages
 - When you tap "Upload to YouTube", the app only hands the saved video to the YouTube app. We do not upload it ourselves and do not see your YouTube account.
 - The app never changes your original files. Edits are saved as **new files** in `Pictures/PhotoVideoStudio` and `Movies/PhotoVideoStudio` on your device. You can delete them at any time from the app's "Your creations" list or from your gallery.
 - Photos you add to a slideshow, and pictures you place on top of a photo or video, are **copied into the app's private storage** so a saved draft keeps working. Voice recordings and generated voiceovers are also kept in private storage until you remove them. Settings → "Clear temporary files" removes camera clips, voiceovers and unfinished exports. Uninstalling the app deletes all of this private data.
-- The Ringtone maker cuts the song you choose **on your device** and saves the clip in `Ringtones/ReelMint`. Songs are never uploaded. Only use music you have the right to use.
+- The Ringtone maker cuts the song you choose **on your device** and saves the clip in `Ringtones/Framora`. Songs are never uploaded. Only use music you have the right to use.
 - Features such as portrait background blur/removal run **on your device** using an on-device model. Your picture is not sent anywhere for this.
 - Text-to-speech voiceover uses your phone's own text-to-speech engine. If your device is set up to use a different speech provider, that provider's privacy policy applies to the text you type for that feature.
 
@@ -22,7 +22,7 @@ ReelMint lets you edit photos, cut and edit videos, make slideshows and collages
 
 - The camera permission is requested only when you open the camera. The microphone permission is requested only when you record a video or tap "Record voiceover".
 - The camera and microphone are used only while you are recording. Recordings stay on your device as described above.
-- You can withdraw either permission at any time in Android Settings → Apps → ReelMint → Permissions.
+- You can withdraw either permission at any time in Android Settings → Apps → Framora → Permissions.
 
 ## 3. Information we do not collect
 
@@ -44,11 +44,11 @@ This information goes to Google and its advertising partners, **not to us**, and
 
 **Consent and choices.** Where the law requires it (for example in the European Economic Area, the UK and some other regions), the app asks for your consent through Google's consent form before any ad is requested. If you decline, ads may be limited or not shown. You can review your choice later in Settings → "Ad privacy choices" when it is available for your region. You can also reset your advertising ID or opt out of ads personalisation in Android Settings → Google → Ads (the exact path varies by device).
 
-## 5. ReelMint Pro purchase (Razorpay)
+## 5. Framora Pro purchase (Razorpay)
 
-- ReelMint Pro is an **optional**, one-time payment (the price is shown in the app) that removes ads and unlocks extra tools. There is no subscription.
-- Payments are processed by **Razorpay** (Razorpay Software Private Limited). When you pay, you type your payment details (UPI, card, netbanking or wallet) and your mobile number and email on **Razorpay's own screen**. **ReelMint never sees or stores your card, UPI or bank details.** Razorpay's privacy policy governs what it collects: https://razorpay.com/privacy/
-- After a successful payment ReelMint keeps only the **payment ID and the date** on your device, to remember that you own Pro. This small record is included in Android's cloud backup and device transfer so Pro can return after a reinstall; nothing else from the app is backed up.
+- Framora Pro is an **optional**, one-time payment (the price is shown in the app) that removes ads and unlocks extra tools. There is no subscription.
+- Payments are processed by **Razorpay** (Razorpay Software Private Limited). When you pay, you type your payment details (UPI, card, netbanking or wallet) and your mobile number and email on **Razorpay's own screen**. **Framora never sees or stores your card, UPI or bank details.** Razorpay's privacy policy governs what it collects: https://razorpay.com/privacy/
+- After a successful payment Framora keeps only the **payment ID and the date** on your device, to remember that you own Pro. This small record is included in Android's cloud backup and device transfer so Pro can return after a reinstall; nothing else from the app is backed up.
 - Your photos, videos and audio are never part of a payment and never sent to Razorpay.
 
 ## 6. Permissions the app uses
@@ -59,7 +59,7 @@ This information goes to Google and its advertising partners, **not to us**, and
 | Microphone | Record audio with a video or a voiceover, only when you choose to. |
 | Internet and network state | Needed only to load ads and the consent form and to complete a Pro payment. Editing works without a connection. |
 | Advertising ID | Used by Google's advertising SDK, subject to your consent choices. |
-| NFC and basic phone state | Added by Razorpay's payment library for its checkout screen (for example tap-to-pay cards). ReelMint itself does not use them. |
+| NFC and basic phone state | Added by Razorpay's payment library for its checkout screen (for example tap-to-pay cards). Framora itself does not use them. |
 | Modify system settings | Used only when you tap "Set as ringtone / notification / alarm" in the Ringtone maker. Android asks you to allow it first. |
 
 ## 7. Where your information is kept and for how long
@@ -71,7 +71,7 @@ This information goes to Google and its advertising partners, **not to us**, and
 
 ## 8. Children
 
-ReelMint is **not directed to children under 13**, and we do not knowingly collect personal information from children. If you believe a child has provided information through the app, contact us and we will help.
+Framora is **not directed to children under 13**, and we do not knowingly collect personal information from children. If you believe a child has provided information through the app, contact us and we will help.
 
 ## 9. Your rights
 

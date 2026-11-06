@@ -1,4 +1,4 @@
-# Play Console → Data safety: answers for ReelMint
+# Play Console → Data safety: answers for Framora
 
 These follow what the app really does today. Google's own AdMob page ("Provide information for Google Play's Data safety section") lists exactly what its SDK collects; **tick what that page says in addition to the rows below** and re-check it whenever you update the ads SDK.
 
@@ -10,7 +10,7 @@ These follow what the app really does today. Google's own AdMob page ("Provide i
 | Photos and videos | **Not collected.** They stay on the device and are never sent anywhere. |
 | Audio (voice recordings) | **Not collected.** Recorded on device only. |
 | Files and docs | Not collected. |
-| Personal info (name, email, phone…) | Not collected by ReelMint. (If someone buys Pro, they type a mobile number and email into **Razorpay's** checkout; see the payments table below.) |
+| Personal info (name, email, phone…) | Not collected by Framora. (If someone buys Pro, they type a mobile number and email into **Razorpay's** checkout; see the payments table below.) |
 | Location | Not collected by the app; the ads SDK may derive approximate location from the IP address (declare per Google's AdMob page). |
 | Device or other IDs | **Collected and shared** (advertising ID) for advertising. |
 | App activity / app info and performance | Declare ad interactions and diagnostics as listed on Google's AdMob page. |
@@ -23,7 +23,7 @@ These follow what the app really does today. Google's own AdMob page ("Provide i
 | Item | What to do |
 |---|---|
 | Payments | The app uses **Razorpay Checkout**. Declare what Razorpay's SDK collects (payment info, the contact details typed in checkout, device identifiers) by following **Razorpay's own Play data-safety guidance**, the same way as for AdMob above. It changes, so re-check it when you update the SDK. |
-| Purchase history | ReelMint stores a payment ID and date **on the device** (and in Android backup). In app-only mode nothing is sent to a ReelMint server. If you turn on the optional payment server, the order ID, payment ID and signature are sent to it: then declare that and update the privacy policy. |
+| Purchase history | Framora stores a payment ID and date **on the device** (and in Android backup). In app-only mode nothing is sent to a Framora server. If you turn on the optional payment server, the order ID, payment ID and signature are sent to it: then declare that and update the privacy policy. |
 | Permissions added by the SDK | `NFC` and `READ_BASIC_PHONE_STATE` (normal permissions, no prompt). NFC is declared as not required, so the app stays installable on every phone. |
 | Payments policy | **Read `docs/PAYMENTS.md` first.** Selling in-app unlocks outside Google Play Billing can get an app rejected or removed. |
 

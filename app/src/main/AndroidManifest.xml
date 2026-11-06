@@ -36,7 +36,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
-            <!-- "Share → ReelMint" from Gallery, Files, Drive, etc. -->
+            <!-- "Share → Framora" from Gallery, Files, Drive, etc. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

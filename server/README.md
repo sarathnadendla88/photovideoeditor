@@ -1,4 +1,4 @@
-# ReelMint payment server
+# Framora payment server
 
 Reference implementation of the three endpoints the app calls (`/orders`, `/verify`, `/restore`). No dependencies, Node 18+. It holds the Razorpay **key secret**, so it is the only place the secret may live.
 

@@ -20,11 +20,11 @@ val proPricePaise = prop("PRO_PRICE_PAISE").ifEmpty { "5000" }.toInt()   // ₹5
 require(proPricePaise in 100..1_000_000) { "PRO_PRICE_PAISE out of range" }
 
 android {
-    namespace = "com.sarath.photovideo"
+    namespace = "com.video.framora"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.sarath.photovideo"
+        applicationId = "com.video.framora"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
